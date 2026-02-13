@@ -3,6 +3,7 @@
 /entry/build
 /.preview
 /oh_modules
+/.hvigor
 
 # IDE 配置（可选择是否忽略）
 /.idea
