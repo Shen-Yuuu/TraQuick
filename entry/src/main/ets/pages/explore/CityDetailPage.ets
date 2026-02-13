@@ -183,6 +183,14 @@ struct CityDetailPage {
     }).catch(() => {});
   }
 
+  // ⭐ 新增：跳转到图片预览
+  private openImagePreview(post: Post, imageIndex: number): void {
+    router.pushUrl({
+      url: 'pages/community/ImagePreviewPage',
+      params: { postId: post.id, imageIndex: imageIndex }
+    }).catch(() => {});
+  }
+
   private navigateToUser(userId: string): void {
     router.pushUrl({
       url: 'pages/community/UserProfilePage',
@@ -604,6 +612,7 @@ struct CityDetailPage {
       if (this.cityPosts.length > 0) {
         ForEach(this.cityPosts, (post: Post) => {
           Row() {
+            // 左侧头像
             Column() {
               Text(post.author.nickname.charAt(0))
                 .fontSize(16)
@@ -868,33 +877,33 @@ struct CityDetailPage {
   CityPostImageGrid(post: Post) {
     Column() {
       if (post.images.length === 1) {
-        this.CityImageItem(post.images, 0, 180, 180)
+        this.CityImageItem(post, 0, 180, 180)
       } else if (post.images.length === 2) {
         Row({ space: 4 }) {
-          this.CityImageItem(post.images, 0, 120, 120)
-          this.CityImageItem(post.images, 1, 120, 120)
+          this.CityImageItem(post, 0, 120, 120)
+          this.CityImageItem(post, 1, 120, 120)
         }
       } else if (post.images.length === 3) {
         Row({ space: 4 }) {
-          this.CityImageItem(post.images, 0, 78, 78)
-          this.CityImageItem(post.images, 1, 78, 78)
-          this.CityImageItem(post.images, 2, 78, 78)
+          this.CityImageItem(post, 0, 78, 78)
+          this.CityImageItem(post, 1, 78, 78)
+          this.CityImageItem(post, 2, 78, 78)
         }
       } else {
         Column({ space: 4 }) {
           Row({ space: 4 }) {
-            this.CityImageItem(post.images, 0, 78, 78)
-            this.CityImageItem(post.images, 1, 78, 78)
-            this.CityImageItem(post.images, 2, 78, 78)
+            this.CityImageItem(post, 0, 78, 78)
+            this.CityImageItem(post, 1, 78, 78)
+            this.CityImageItem(post, 2, 78, 78)
           }
           if (post.images.length > 3) {
             Row({ space: 4 }) {
-              this.CityImageItem(post.images, 3, 78, 78)
+              this.CityImageItem(post, 3, 78, 78)
               if (post.images.length > 4) {
-                this.CityImageItem(post.images, 4, 78, 78)
+                this.CityImageItem(post, 4, 78, 78)
               }
               if (post.images.length > 5) {
-                this.CityImageItem(post.images, 5, 78, 78)
+                this.CityImageItem(post, 5, 78, 78)
               }
             }
           }
@@ -906,9 +915,9 @@ struct CityDetailPage {
   }
 
   @Builder
-  CityImageItem(images: string[], index: number, w: number, h: number) {
+  CityImageItem(post: Post, index: number, w: number, h: number) {
     Stack() {
-      Image(images[index])
+      Image(post.images[index])
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Cover)
@@ -923,6 +932,9 @@ struct CityDetailPage {
         [this.getImageColor(index), 0],
         [this.getImageColorEnd(index), 1]
       ]
+    })
+    .onClick(() => {
+      this.openImagePreview(post, index);
     })
   }
 
