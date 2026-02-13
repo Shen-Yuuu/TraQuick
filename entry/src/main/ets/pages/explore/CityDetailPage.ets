@@ -3,6 +3,8 @@
  */
 
 import { router } from '@kit.ArkUI';
+import { Post, PostComment } from '../../models/Post';
+import { mockPosts } from '../../services/MockData';
 
 // ==================== 数据接口 ====================
 
@@ -101,15 +103,9 @@ struct CityDetailPage {
   @State scrollY: number = 0;
   @State imageScale: number = 1.3;
 
-  private scroller: Scroller = new Scroller();
+  @State cityPosts: Post[] = [];
 
-  private tabs: CityTabItem[] = [
-    { title: '城市' },
-    { title: '社区' },
-    { title: '驴友' },
-    { title: '攻略' },
-  ];
-
+  // 在 aboutToAppear 的最后加载城市相关动态
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, Object>;
     if (params) {
@@ -120,7 +116,79 @@ struct CityDetailPage {
         this.cityId = params['cityId'] as string;
       }
     }
+    // 加载该城市的动态
+    this.loadCityPosts();
   }
+
+  private loadCityPosts(): void {
+    // 过滤出该城市的动态
+    this.cityPosts = mockPosts.filter((post: Post) => {
+      return post.location !== undefined && post.location.cityName === this.cityName;
+    });
+    // 如果该城市没有动态，展示所有动态作为推荐
+    if (this.cityPosts.length === 0) {
+      this.cityPosts = mockPosts;
+    }
+  }
+
+  private onPostLike(post: Post): void {
+    const index = this.cityPosts.findIndex((p: Post) => p.id === post.id);
+    if (index !== -1) {
+      const source = this.cityPosts[index];
+      const updated: Post = {
+        id: source.id, author: source.author, content: source.content,
+        images: source.images, video: source.video, location: source.location,
+        tags: source.tags, likeCount: source.likeCount + (source.isLiked ? -1 : 1),
+        commentCount: source.commentCount, shareCount: source.shareCount,
+        collectCount: source.collectCount, isLiked: !source.isLiked,
+        isCollected: source.isCollected, createdAt: source.createdAt,
+        type: source.type, hotComments: source.hotComments,
+      };
+      this.cityPosts[index] = updated;
+    }
+  }
+
+  private navigateToPostDetail(post: Post): void {
+    router.pushUrl({
+      url: 'pages/community/PostDetailPage',
+      params: { postId: post.id }
+    }).catch(() => {});
+  }
+
+  private navigateToUser(userId: string): void {
+    router.pushUrl({
+      url: 'pages/community/UserProfilePage',
+      params: { userId: userId }
+    }).catch(() => {});
+  }
+
+  private formatTime(dateStr: string): string {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours < 1) return '刚刚';
+    if (hours < 24) return `${hours}小时前`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}天前`;
+    return `${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+
+  private formatCount(count: number): string {
+    if (count >= 10000) return `${(count / 10000).toFixed(1)}万`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+    return `${count}`;
+  }
+
+  private scroller: Scroller = new Scroller();
+
+  private tabs: CityTabItem[] = [
+    { title: '城市' },
+    { title: '社区' },
+    { title: '驴友' },
+    { title: '攻略' },
+  ];
+
 
   /**
    * 根据滚动位置计算背景图缩放
@@ -640,96 +708,266 @@ struct CityDetailPage {
 
   @Builder
   CommunityContent() {
-    Column({ space: 12 }) {
-      ForEach([1, 2, 3], (item: number) => {
-        Column() {
+    Column({ space: 0 }) {
+      if (this.cityPosts.length > 0) {
+        ForEach(this.cityPosts, (post: Post) => {
+          // 和主界面一致的帖子卡片
           Row() {
+            // 左侧头像
             Column() {
-              Text('🧑‍✈️')
-                .fontSize(20)
+              Text(post.author.nickname.charAt(0))
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FFFFFF')
             }
             .width(40)
             .height(40)
-            .backgroundColor('#DBEAFE')
             .borderRadius(20)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
-
-            Column() {
-              Text(`旅行者 ${item}`)
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#1E293B')
-              Text('2小时前')
-                .fontSize(11)
-                .fontColor('#94A3B8')
-                .margin({ top: 2 })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .margin({ left: 10 })
-            .layoutWeight(1)
-
-            Text('⋯')
-              .fontSize(18)
-              .fontColor('#94A3B8')
-          }
-          .width('100%')
-          .margin({ bottom: 12 })
-
-          Text('埃菲尔铁塔的夜景真的太美了！灯光闪烁的时刻让人永生难忘！推荐晚上8点以后去，刚好可以看到灯光秀 ✨ #巴黎')
-            .fontSize(14)
-            .fontColor('#475569')
-            .lineHeight(22)
-            .margin({ bottom: 12 })
-
-          Column()
-            .width('100%')
-            .aspectRatio(1.6)
-            .borderRadius(12)
             .linearGradient({
               direction: GradientDirection.RightBottom,
-              colors: [['#93C5FD', 0], ['#38BDF8', 1]]
+              colors: [['#7DD3FC', 0], ['#0EA5E9', 1]]
             })
+            .justifyContent(FlexAlign.Center)
+            .margin({ right: 12 })
+            .onClick(() => this.navigateToUser(post.author.id))
 
-          Row() {
-            Row() {
-              Text('❤️')
+            // 右侧内容
+            Column() {
+              // 用户名
+              Row() {
+                Column() {
+                  Text(post.author.nickname)
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor('#1E293B')
+                  Text(post.author.levelTitle || '')
+                    .fontSize(11)
+                    .fontColor('#94A3B8')
+                    .margin({ top: 1 })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .onClick(() => this.navigateToUser(post.author.id))
+
+                Blank()
+
+                Text('···')
+                  .fontSize(18)
+                  .fontColor('#C0C0C0')
+              }
+              .width('100%')
+
+              // 文本内容
+              Text(post.content)
                 .fontSize(14)
-              Text(`${item * 234}`)
-                .fontSize(12)
-                .fontColor('#64748B')
-                .margin({ left: 4 })
+                .fontColor('#333333')
+                .lineHeight(22)
+                .margin({ top: 8 })
+                .width('100%')
+                .maxLines(4)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .onClick(() => this.navigateToPostDetail(post))
+
+              // 图片网格
+              if (post.images && post.images.length > 0) {
+                this.CityPostImageGrid(post)
+              }
+
+              // 位置 + 时间
+              Row() {
+                if (post.location && post.location.cityName) {
+                  Text(post.location.cityName)
+                    .fontSize(12)
+                    .fontColor('#38BDF8')
+                    .margin({ right: 8 })
+                }
+                Text(this.formatTime(post.createdAt))
+                  .fontSize(12)
+                  .fontColor('#B0B0B0')
+              }
+              .width('100%')
+              .margin({ top: 10 })
+
+              // 热门评论
+              if (post.hotComments && post.hotComments.length > 0) {
+                Column() {
+                  ForEach(post.hotComments.slice(0, 2), (comment: PostComment) => {
+                    Row() {
+                      Text(comment.userNickname)
+                        .fontSize(12)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor('#475569')
+                      Text(`：${comment.content}`)
+                        .fontSize(12)
+                        .fontColor('#64748B')
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        .layoutWeight(1)
+                    }
+                    .width('100%')
+                    .margin({ bottom: 4 })
+                  })
+
+                  if (post.commentCount > 2) {
+                    Text(`查看全部 ${post.commentCount} 条评论`)
+                      .fontSize(11)
+                      .fontColor('#94A3B8')
+                      .margin({ top: 2 })
+                      .onClick(() => this.navigateToPostDetail(post))
+                  }
+                }
+                .width('100%')
+                .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+                .backgroundColor('#F8FAFC')
+                .borderRadius(8)
+                .margin({ top: 8 })
+                .onClick(() => this.navigateToPostDetail(post))
+              }
+
+              // 操作按钮栏
+              Row() {
+                Row() {
+                  Text(post.isLiked ? '❤️' : '🤍')
+                    .fontSize(14)
+                  if (post.likeCount > 0) {
+                    Text(`${this.formatCount(post.likeCount)}`)
+                      .fontSize(12)
+                      .fontColor(post.isLiked ? '#38BDF8' : '#888888')
+                      .margin({ left: 4 })
+                  }
+                }
+                .onClick(() => this.onPostLike(post))
+
+                Row() {
+                  Text('💬')
+                    .fontSize(14)
+                  if (post.commentCount > 0) {
+                    Text(`${this.formatCount(post.commentCount)}`)
+                      .fontSize(12)
+                      .fontColor('#888888')
+                      .margin({ left: 4 })
+                  }
+                }
+                .onClick(() => this.navigateToPostDetail(post))
+
+                Row() {
+                  Text('↗️')
+                    .fontSize(14)
+                  if (post.shareCount > 0) {
+                    Text(`${this.formatCount(post.shareCount)}`)
+                      .fontSize(12)
+                      .fontColor('#888888')
+                      .margin({ left: 4 })
+                  }
+                }
+              }
+              .width('100%')
+              .margin({ top: 10 })
+              .justifyContent(FlexAlign.SpaceAround)
             }
-
-            Row() {
-              Text('💬')
-                .fontSize(14)
-              Text(`${item * 12}`)
-                .fontSize(12)
-                .fontColor('#64748B')
-                .margin({ left: 4 })
-            }
-            .margin({ left: 24 })
-
-            Blank()
-
-            Text('🔖')
-              .fontSize(16)
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
           }
           .width('100%')
-          .margin({ top: 12 })
+          .padding(16)
+          .alignItems(VerticalAlign.Top)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
+          .margin({ bottom: 12 })
+        })
+      } else {
+        Column() {
+          Text('📭')
+            .fontSize(48)
+            .margin({ bottom: 12 })
+          Text('该城市暂无动态')
+            .fontSize(15)
+            .fontColor('#94A3B8')
+          Text('去发布第一条吧')
+            .fontSize(13)
+            .fontColor('#CBD5E1')
+            .margin({ top: 4 })
         }
         .width('100%')
-        .padding(16)
+        .height(200)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
         .backgroundColor('#FFFFFF')
         .borderRadius(16)
-        .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
-      })
+      }
 
       Column().height(20)
     }
     .width('100%')
     .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  CityPostImageGrid(post: Post) {
+    Column() {
+      if (post.images.length === 1) {
+        this.CityImageItem(post.images, 0, 180, 180)
+      } else if (post.images.length === 2) {
+        Row({ space: 4 }) {
+          this.CityImageItem(post.images, 0, 120, 120)
+          this.CityImageItem(post.images, 1, 120, 120)
+        }
+      } else if (post.images.length === 3) {
+        Row({ space: 4 }) {
+          this.CityImageItem(post.images, 0, 78, 78)
+          this.CityImageItem(post.images, 1, 78, 78)
+          this.CityImageItem(post.images, 2, 78, 78)
+        }
+      } else {
+        Column({ space: 4 }) {
+          Row({ space: 4 }) {
+            this.CityImageItem(post.images, 0, 78, 78)
+            this.CityImageItem(post.images, 1, 78, 78)
+            this.CityImageItem(post.images, 2, 78, 78)
+          }
+          if (post.images.length > 3) {
+            Row({ space: 4 }) {
+              ForEach(post.images.slice(3, 6), (img: string, idx: number) => {
+                this.CityImageItem(post.images, idx + 3, 78, 78)
+              })
+            }
+          }
+        }
+      }
+    }
+    .margin({ top: 10 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  CityImageItem(images: string[], index: number, w: number, h: number) {
+    Stack() {
+      Image(images[index])
+        .width('100%')
+        .height('100%')
+        .objectFit(ImageFit.Cover)
+    }
+    .width(w)
+    .height(h)
+    .backgroundColor('#E8E8E8')
+    .borderRadius(6)
+    .linearGradient({
+      direction: GradientDirection.RightBottom,
+      colors: [
+        [this.getImageColor(index), 0],
+        [this.getImageColorEnd(index), 1]
+      ]
+    })
+  }
+
+  private getImageColor(index: number): string {
+    const colors: string[] = ['#E0F2FE', '#CFFAFE', '#BAE6FD', '#A5F3FC', '#BAE6FD', '#D1D5DB'];
+    return colors[index % colors.length];
+  }
+
+  private getImageColorEnd(index: number): string {
+    const colors: string[] = ['#7DD3FC', '#4F46E5', '#38BDF8', '#6366F1', '#38BDF8', '#6B7280'];
+    return colors[index % colors.length];
   }
 
   // ==================== 驴友 Tab ====================

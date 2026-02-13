@@ -1,8 +1,7 @@
 /**
- * 漂流瓶页面- 愿望互动
+ * 漂流瓶页面 - 海洋主题沉浸式设计
  */
 
-import { Colors, FontSizes, Spacing, Radius } from '../../utils/Constants';
 import { router } from '@kit.ArkUI';
 
 interface DriftBottle {
@@ -18,64 +17,79 @@ interface DriftBottleTypeOption {
   key: 'wish' | 'story' | 'question';
   label: string;
   icon: string;
+  desc: string;
+  color: string;
 }
 
 @Entry
 @Component
 struct DriftBottlePage {
-  @State currentTab: number = 0;  // 0: 捡瓶子, 1: 投瓶子, 2: 我的瓶子
+  @State currentTab: number = 0;
   @State pickedBottle: DriftBottle | null = null;
   @State myContent: string = '';
   @State selectedType: 'wish' | 'story' | 'question' = 'wish';
   @State isPicking: boolean = false;
   @State myBottles: DriftBottle[] = [];
+  @State bottleFloat: number = 0;
 
-  private tabs: string[] = ['捡瓶', '投瓶', '我的瓶子'];
   private typeOptions: DriftBottleTypeOption[] = [
-    { key: 'wish', label: '许愿', icon: '🌟' },
-    { key: 'story', label: '故事', icon: '📖' },
-    { key: 'question', label: '提问', icon: '❓' },
+    { key: 'wish', label: '许愿', icon: '🌟', desc: '许下心愿', color: '#FEF3C7' },
+    { key: 'story', label: '故事', icon: '📖', desc: '分享故事', color: '#DBEAFE' },
+    { key: 'question', label: '提问', icon: '❓', desc: '抛出问题', color: '#FCE7F3' },
   ];
 
   aboutToAppear(): void {
     this.loadMyBottles();
+    this.startBottleAnimation();
   }
 
-  // 加载我的漂流瓶
+  private startBottleAnimation(): void {
+    setInterval(() => {
+      animateTo({ duration: 2000, curve: Curve.EaseInOut }, () => {
+        this.bottleFloat = this.bottleFloat === 0 ? -12 : 0;
+      });
+    }, 2000);
+  }
+
   private loadMyBottles(): void {
     this.myBottles = [
       {
         id: 'bottle_001',
         content: '希望今年能去一次日本看樱花 🌸',
-        senderNickname: '小安',
+        senderNickname: '我',
         senderCity: '北京',
         createdAt: new Date(Date.now() - 86400000).toISOString(),
         type: 'wish',
       },
       {
         id: 'bottle_002',
-        content: '在成都吃到了超级好吃的火锅，分享给有缘人',
-        senderNickname: '小鹿',
+        content: '在成都吃到了超级好吃的火锅，分享给有缘人 🌶️',
+        senderNickname: '我',
         senderCity: '成都',
         createdAt: new Date(Date.now() - 172800000).toISOString(),
         type: 'story',
       },
+      {
+        id: 'bottle_003',
+        content: '一个人旅行是什么感觉？有没有人分享一下经验？',
+        senderNickname: '我',
+        senderCity: '上海',
+        createdAt: new Date(Date.now() - 259200000).toISOString(),
+        type: 'question',
+      },
     ];
   }
 
-  // 捡瓶
   private pickBottle(): void {
     if (this.isPicking) return;
-
     this.isPicking = true;
     this.pickedBottle = null;
 
-    // 模拟捡瓶子过程
     setTimeout(() => {
       this.isPicking = false;
       this.pickedBottle = {
         id: `bottle_${Date.now()}`,
-        content: '希望每个看到这条消息的人都能开心每一天！遇见美好，遇见幸福。',
+        content: '希望每个看到这条消息的人都能开心每一天！遇见美好，遇见幸福 ✨',
         senderNickname: '漂流者',
         senderCity: '上海',
         createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
@@ -84,30 +98,21 @@ struct DriftBottlePage {
     }, 2000);
   }
 
-  // 投瓶
   private throwBottle(): void {
     if (!this.myContent.trim()) return;
 
     const newBottle: DriftBottle = {
       id: `bottle_${Date.now()}`,
       content: this.myContent,
-      senderNickname: '旅行者',
+      senderNickname: '我',
       senderCity: '北京',
       createdAt: new Date().toISOString(),
       type: this.selectedType,
     };
     this.myBottles = [newBottle, ...this.myBottles];
     this.myContent = '';
-
-    // TODO: 显示成功提示
   }
 
-  // 返回
-  private goBack(): void {
-    router.back();
-  }
-
-  // 格式化时间
   private formatTime(isoString: string): string {
     const date = new Date(isoString);
     const now = new Date();
@@ -121,351 +126,570 @@ struct DriftBottlePage {
     return `${date.getMonth() + 1}月${date.getDate()}日`;
   }
 
+  private getTypeInfo(type: string): DriftBottleTypeOption {
+    return this.typeOptions.find(t => t.key === type) ||
+      { key: 'wish' as 'wish', label: '许愿', icon: '🌟', desc: '', color: '#FEF3C7' };
+  }
+
   build() {
-    Column() {
-      // 导航栏
-      this.NavigationBar()
+    Stack() {
+      // 海洋背景
+      Column()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          direction: GradientDirection.Bottom,
+          colors: [
+            ['#E0F2FE', 0],
+            ['#BAE6FD', 0.3],
+            ['#7DD3FC', 0.6],
+            ['#38BDF8', 0.85],
+            ['#0EA5E9', 1]
+          ]
+        })
 
-      // Tab栏
-      this.TabBar()
+      // 内容
+      Column() {
+        // 导航栏
+        this.NavigationBar()
 
-      // 内容区域
-      if (this.currentTab === 0) {
-        this.PickContent()
-      } else if (this.currentTab === 1) {
-        this.ThrowContent()
-      } else {
-        this.MyBottlesContent()
+        // Tab 栏
+        this.TabBar()
+
+        // 内容区
+        if (this.currentTab === 0) {
+          this.PickContent()
+        } else if (this.currentTab === 1) {
+          this.ThrowContent()
+        } else {
+          this.MyBottlesContent()
+        }
       }
+      .width('100%')
+      .height('100%')
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Colors.bgSecondary)
   }
+
+  // ==================== 导航栏 ====================
 
   @Builder
   NavigationBar() {
-    Row() {
-      Row() {
-        Text('←')
-          .fontSize(24)
-          .fontColor(Colors.textPrimary)
+    Stack() {
+      // 标题居中
+      Column() {
+        Text('漂流瓶')
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1E293B')
+        Text('来自世界各地的声音')
+          .fontSize(11)
+          .fontColor('#64748B')
+          .margin({ top: 2 })
       }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .onClick(() => this.goBack())
+      .alignItems(HorizontalAlign.Center)
+      .width('100%')
 
-      Blank()
-
-      Text('漂流瓶')
-        .fontSize(FontSizes.body)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Colors.textPrimary)
-
-      Blank()
-
-      Row().width(44).height(44)
+      // 返回按钮靠左
+      Row() {
+        Column() {
+          Text('←')
+            .fontSize(22)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#1E293B')
+        }
+        .width(38)
+        .height(38)
+        .borderRadius(19)
+        .backgroundColor('rgba(255,255,255,0.8)')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .onClick(() => { router.back(); })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Start)
     }
     .width('100%')
-    .height(56)
-    .padding({ left: 4, right: 4, top: 48 })
-    .backgroundColor(Colors.bgPrimary)
+    .padding({ left: 20, right: 20, top: 44, bottom: 8 })
   }
+
+  // ==================== Tab栏 ====================
 
   @Builder
   TabBar() {
     Row() {
-      ForEach(this.tabs, (tab: string, index: number) => {
-        Column() {
-          Text(tab)
-            .fontSize(FontSizes.body)
-            .fontWeight(this.currentTab === index ? FontWeight.Bold : FontWeight.Normal)
-            .fontColor(this.currentTab === index ? Colors.primary : Colors.textTertiary)
-            .onClick(() => {
-              this.currentTab = index;
-            })
-
-          if (this.currentTab === index) {
-            Row()
-              .width(24)
-              .height(3)
-              .backgroundColor(Colors.primary)
-              .borderRadius(2)
-              .margin({ top: 8 })
-          } else {
-            Row().height(11)
+      Row() {
+        ForEach(['捡瓶', '投瓶', '我的'], (tab: string, index: number) => {
+          Column() {
+            Text(tab)
+              .fontSize(14)
+              .fontWeight(this.currentTab === index ? FontWeight.Bold : FontWeight.Medium)
+              .fontColor(this.currentTab === index ? '#0369A1' : 'rgba(0,0,0,0.4)')
           }
-        }
-      })
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Center)
+          .justifyContent(FlexAlign.Center)
+          .height('100%')
+          .onClick(() => { this.currentTab = index; })
+        })
+      }
+      .width('70%')
+      .height(40)
+      .backgroundColor('rgba(255,255,255,0.5)')
+      .borderRadius(20)
     }
     .width('100%')
-    .height(56)
-    .justifyContent(FlexAlign.SpaceEvenly)
-    .backgroundColor(Colors.bgPrimary)
+    .justifyContent(FlexAlign.Center)
+    .margin({ top: 4, bottom: 8 })
   }
+
+  // ==================== 捡瓶子 ====================
 
   @Builder
   PickContent() {
     Column() {
       Blank()
 
-      // 海浪动画区域
-      Column() {
-        if (this.isPicking) {
-          // 捡瓶子动画
+      if (this.isPicking) {
+        // 捡瓶子动画
+        Column({ space: 16 }) {
+          Text('🍾')
+            .fontSize(80)
+            .translate({ y: this.bottleFloat })
+
+          Text('正在海上寻找漂流瓶...')
+            .fontSize(15)
+            .fontColor('rgba(255,255,255,0.9)')
+
+          LoadingProgress()
+            .width(28)
+            .height(28)
+            .color(Color.White)
+        }
+        .alignItems(HorizontalAlign.Center)
+
+      } else if (this.pickedBottle !== null) {
+        // 捡到瓶子的结果
+        Column() {
+          Text('🎉')
+            .fontSize(40)
+            .margin({ bottom: 8 })
+
+          Text('你捡到了一个漂流瓶')
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+
+          // 瓶子内容卡片
           Column() {
-            Text('🍾')
-              .fontSize(80)
-            Text('正在海上寻找漂流瓶...')
-              .fontSize(FontSizes.body)
-              .fontColor(Colors.textSecondary)
-              .margin({ top: 20 })
-            LoadingProgress()
-              .width(32)
-              .height(32)
-              .margin({ top: 16 })
-          }
-        } else if (this.pickedBottle) {
-          // 展示捡到的瓶子
-          Column() {
-            Text('🎉')
-              .fontSize(48)
-              .margin({ bottom: 16 })
-            Text('你捡到了一个漂流瓶')
-              .fontSize(FontSizes.h4)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Colors.textPrimary)
-
-            Column() {
-              Text(this.pickedBottle.content)
-                .fontSize(FontSizes.body)
-                .fontColor(Colors.textPrimary)
-                .lineHeight(24)
-                .textAlign(TextAlign.Center)
-
-              Row() {
-                Text(`来自 ${this.pickedBottle.senderCity}`)
-                  .fontSize(FontSizes.small)
-                  .fontColor(Colors.textTertiary)
-                Text(' · ')
-                  .fontSize(FontSizes.small)
-                  .fontColor(Colors.textQuaternary)
-                Text(this.formatTime(this.pickedBottle.createdAt))
-                  .fontSize(FontSizes.small)
-                  .fontColor(Colors.textTertiary)
-              }
-              .margin({ top: 16 })
-            }
-            .width('100%')
-            .padding(24)
-            .margin({ top: 24 })
-            .backgroundColor(Colors.bgPrimary)
-            .borderRadius(Radius.card)
-
+            // 类型标签
             Row() {
-              Button('回复TA')
-                .fontSize(FontSizes.body)
-                .fontColor(Colors.primary)
-                .backgroundColor(Colors.primaryLightest)
-                .borderRadius(Radius.full)
-                .height(44)
-                .layoutWeight(1)
-
-              Button('再捡一个')
-                .fontSize(FontSizes.body)
-                .fontColor(Colors.textWhite)
-                .backgroundColor(Colors.primary)
-                .borderRadius(Radius.full)
-                .height(44)
-                .layoutWeight(1)
-                .margin({ left: 16 })
-                .onClick(() => this.pickBottle())
+              Text(this.getTypeInfo(this.pickedBottle.type).icon)
+                .fontSize(14)
+              Text(this.getTypeInfo(this.pickedBottle.type).label)
+                .fontSize(12)
+                .fontColor('#64748B')
+                .margin({ left: 4 })
             }
-            .width('100%')
-            .margin({ top: 24 })
+            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+            .backgroundColor(this.getTypeInfo(this.pickedBottle.type).color)
+            .borderRadius(12)
+            .alignSelf(ItemAlign.Start)
+
+            // 内容
+            Text(this.pickedBottle.content)
+              .fontSize(16)
+              .fontColor('#1E293B')
+              .lineHeight(26)
+              .margin({ top: 16 })
+
+            // 分隔线
+            Column()
+              .width('100%')
+              .height(1)
+              .backgroundColor('#F1F5F9')
+              .margin({ top: 20, bottom: 16 })
+
+            // 发送者信息
+            Row() {
+              Column() {
+                Text('🧑‍✈️')
+                  .fontSize(18)
+              }
+              .width(36)
+              .height(36)
+              .backgroundColor('#EFF6FF')
+              .borderRadius(18)
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+
+              Column() {
+                Text(this.pickedBottle.senderNickname)
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#1E293B')
+                Row() {
+                  Text(`📍 ${this.pickedBottle.senderCity}`)
+                    .fontSize(11)
+                    .fontColor('#94A3B8')
+                  Text(` · ${this.formatTime(this.pickedBottle.createdAt)}`)
+                    .fontSize(11)
+                    .fontColor('#94A3B8')
+                }
+                .margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Start)
+              .margin({ left: 10 })
+            }
           }
           .width('100%')
-          .padding({ left: 24, right: 24 })
-        } else {
-          // 等待捡瓶子状态
-          Column() {
-            Text('🌊')
-              .fontSize(80)
-            Text('大海里有很多漂流瓶')
-              .fontSize(FontSizes.body)
-              .fontColor(Colors.textSecondary)
-              .margin({ top: 20 })
-            Text('点击下方按钮试试运气')
-              .fontSize(FontSizes.small)
-              .fontColor(Colors.textTertiary)
-              .margin({ top: 8 })
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(20)
+          .shadow({ radius: 20, color: 'rgba(0,0,0,0.08)', offsetY: 4 })
+          .margin({ top: 20 })
+
+          // 操作按钮
+          Row({ space: 12 }) {
+            Row() {
+              Text('💬 回复TA')
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#0369A1')
+            }
+            .layoutWeight(1)
+            .height(46)
+            .justifyContent(FlexAlign.Center)
+            .backgroundColor('rgba(255,255,255,0.9)')
+            .borderRadius(23)
+
+            Row() {
+              Text('🌊 再捡一个')
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+            }
+            .layoutWeight(1)
+            .height(46)
+            .justifyContent(FlexAlign.Center)
+            .backgroundColor('rgba(255,255,255,0.25)')
+            .borderRadius(23)
+            .border({ width: 1, color: 'rgba(255,255,255,0.4)' })
+            .onClick(() => { this.pickBottle(); })
           }
+          .width('100%')
+          .margin({ top: 20 })
         }
+        .width('100%')
+        .padding({ left: 24, right: 24 })
+
+      } else {
+        // 初始状态
+        Column({ space: 12 }) {
+          // 漂流瓶漂浮动画
+          Text('🍾')
+            .fontSize(90)
+            .translate({ y: this.bottleFloat })
+
+          Text('大海里藏着很多故事')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('rgba(255,255,255,0.95)')
+            .margin({ top: 16 })
+
+          Text('点击下方按钮，捡一个漂流瓶')
+            .fontSize(13)
+            .fontColor('rgba(255,255,255,0.6)')
+        }
+        .alignItems(HorizontalAlign.Center)
       }
 
       Blank()
 
       // 捡瓶子按钮
-      if (!this.pickedBottle) {
-        Button('🍾 捡一个漂流瓶')
+      if (this.pickedBottle === null) {
+        Column() {
+          Row() {
+            Text('🍾')
+              .fontSize(18)
+            Text('捡一个漂流瓶')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#0369A1')
+              .margin({ left: 8 })
+          }
           .width('80%')
-          .height(56)
-          .fontSize(FontSizes.bodyLarge)
-          .fontColor(Colors.textWhite)
-          .backgroundColor(Colors.primary)
-          .borderRadius(Radius.full)
-          .shadow({ radius: 16, color: 'rgba(14, 165, 233, 0.4)', offsetY: 4 })
-          .margin({ bottom: 60 })
-          .onClick(() => this.pickBottle())
-          .enabled(!this.isPicking)
+          .height(52)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor('rgba(255,255,255,0.9)')
+          .borderRadius(26)
+          .shadow({ radius: 16, color: 'rgba(0,0,0,0.1)', offsetY: 4 })
+          .onClick(() => { this.pickBottle(); })
+        }
+        .margin({ bottom: 60 })
       }
     }
     .width('100%')
     .layoutWeight(1)
+    .alignItems(HorizontalAlign.Center)
   }
+
+  // ==================== 投瓶子 ====================
 
   @Builder
   ThrowContent() {
     Column() {
-      // 类型选择
-      Row() {
-        ForEach(this.typeOptions, (option: DriftBottleTypeOption) => {
+      Scroll() {
+        Column() {
+          // 类型选择
           Column() {
-            Text(option.icon)
-              .fontSize(28)
-            Text(option.label)
-              .fontSize(FontSizes.small)
-              .fontColor(this.selectedType === option.key ? Colors.primary : Colors.textTertiary)
-              .margin({ top: 6 })
+            Text('选择漂流瓶类型')
+              .fontSize(13)
+              .fontColor('rgba(255,255,255,0.7)')
+              .margin({ bottom: 12 })
+
+            Row({ space: 12 }) {
+              ForEach(this.typeOptions, (option: DriftBottleTypeOption) => {
+                Column() {
+                  Text(option.icon)
+                    .fontSize(28)
+                  Text(option.label)
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.selectedType === option.key ? '#0369A1' : '#64748B')
+                    .margin({ top: 6 })
+                  Text(option.desc)
+                    .fontSize(10)
+                    .fontColor('#94A3B8')
+                    .margin({ top: 2 })
+                }
+                .layoutWeight(1)
+                .padding({ top: 16, bottom: 16 })
+                .backgroundColor(this.selectedType === option.key ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.6)')
+                .borderRadius(16)
+                .border({
+                  width: 2,
+                  color: this.selectedType === option.key ? '#38BDF8' : 'transparent'
+                })
+                .alignItems(HorizontalAlign.Center)
+                .shadow(this.selectedType === option.key ?
+                  { radius: 12, color: 'rgba(56,189,248,0.2)', offsetY: 4 } :
+                  { radius: 0, color: 'transparent', offsetY: 0 })
+                .onClick(() => { this.selectedType = option.key; })
+              })
+            }
+            .width('100%')
           }
-          .width(80)
-          .height(80)
-          .backgroundColor(this.selectedType === option.key ? Colors.primaryLightest : Colors.bgPrimary)
-          .borderRadius(Radius.card)
-          .border({ width: 2, color: this.selectedType === option.key ? Colors.primary : 'transparent' })
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            this.selectedType = option.key;
-          })
-        })
-      }
-      .width('100%')
-      .padding({ left: Spacing.pagePadding, right: Spacing.pagePadding, top: 24 })
-      .justifyContent(FlexAlign.SpaceEvenly)
-
-      // 内容输入
-      Column() {
-        TextArea({ placeholder: '写下你想说的话，让它漂向远方...', text: this.myContent })
           .width('100%')
-          .height(200)
-          .fontSize(FontSizes.body)
-          .backgroundColor(Colors.bgPrimary)
-          .borderRadius(Radius.card)
-          .padding(16)
-          .onChange((value: string) => {
-            this.myContent = value;
-          })
+          .padding({ left: 20, right: 20, top: 20 })
+          .alignItems(HorizontalAlign.Center)
 
-        Text(`${this.myContent.length}/200`)
-          .fontSize(FontSizes.small)
-          .fontColor(Colors.textTertiary)
-          .margin({ top: 8 })
-          .alignSelf(ItemAlign.End)
+          // 内容输入
+          Column() {
+            TextArea({
+              placeholder: '写下你想说的话，让它漂向远方...',
+              text: this.myContent
+            })
+              .width('100%')
+              .height(180)
+              .fontSize(15)
+              .fontColor('#1E293B')
+              .placeholderColor('#94A3B8')
+              .backgroundColor('transparent')
+              .padding(0)
+              .onChange((value: string) => { this.myContent = value; })
+
+            Row() {
+              Blank()
+              Text(`${this.myContent.length}/200`)
+                .fontSize(12)
+                .fontColor('#94A3B8')
+            }
+            .width('100%')
+          }
+          .width('100%')
+          .padding(20)
+          .margin({ left: 20, right: 20, top: 16 })
+          .backgroundColor('rgba(255,255,255,0.85)')
+          .borderRadius(20)
+        }
       }
-      .width('100%')
-      .padding({ left: Spacing.pagePadding, right: Spacing.pagePadding, top: 24 })
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
 
-      Blank()
-
-      // 投瓶子按钮
-      Button('🍾 扔进大海')
+      // 投瓶按钮
+      Column() {
+        Row() {
+          Text('🍾')
+            .fontSize(18)
+          Text('扔进大海')
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.myContent.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.5)')
+            .margin({ left: 8 })
+        }
         .width('80%')
-        .height(56)
-        .fontSize(FontSizes.bodyLarge)
-        .fontColor(Colors.textWhite)
-        .backgroundColor(this.myContent ? Colors.primary : Colors.bgTertiary)
-        .borderRadius(Radius.full)
-        .margin({ bottom: 60 })
-        .enabled(!!this.myContent)
-        .onClick(() => this.throwBottle())
+        .height(52)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(this.myContent.trim() ? '#0369A1' : 'rgba(0,0,0,0.1)')
+        .borderRadius(26)
+        .shadow(this.myContent.trim() ?
+          { radius: 16, color: 'rgba(3,105,161,0.3)', offsetY: 4 } :
+          { radius: 0, color: 'transparent', offsetY: 0 })
+        .onClick(() => { this.throwBottle(); })
+      }
+      .margin({ bottom: 60 })
     }
     .width('100%')
     .layoutWeight(1)
+    .alignItems(HorizontalAlign.Center)
   }
+
+  // ==================== 我的瓶子 ====================
 
   @Builder
   MyBottlesContent() {
     if (this.myBottles.length > 0) {
-      List() {
-        ForEach(this.myBottles, (bottle: DriftBottle) => {
-          ListItem() {
+      Scroll() {
+        Column({ space: 12 }) {
+          // 统计信息
+          Row({ space: 16 }) {
+            Column() {
+              Text(`${this.myBottles.length}`)
+                .fontSize(22)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FFFFFF')
+              Text('已投出')
+                .fontSize(11)
+                .fontColor('rgba(255,255,255,0.7)')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Center)
+
+            Column()
+              .width(1)
+              .height(30)
+              .backgroundColor('rgba(255,255,255,0.3)')
+
+            Column() {
+              Text('12')
+                .fontSize(22)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FFFFFF')
+              Text('被捡起')
+                .fontSize(11)
+                .fontColor('rgba(255,255,255,0.7)')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Center)
+
+            Column()
+              .width(1)
+              .height(30)
+              .backgroundColor('rgba(255,255,255,0.3)')
+
+            Column() {
+              Text('5')
+                .fontSize(22)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FFFFFF')
+              Text('收到回复')
+                .fontSize(11)
+                .fontColor('rgba(255,255,255,0.7)')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Center)
+          }
+          .width('100%')
+          .padding({ top: 16, bottom: 16 })
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor('rgba(255,255,255,0.15)')
+          .borderRadius(16)
+
+          // 瓶子列表
+          ForEach(this.myBottles, (bottle: DriftBottle) => {
             Column() {
               Row() {
-                Text(this.typeOptions.find(t => t.key === bottle.type)?.icon || '🍾')
-                  .fontSize(20)
-                Text(this.typeOptions.find(t => t.key === bottle.type)?.label || '')
-                  .fontSize(FontSizes.small)
-                  .fontColor(Colors.textTertiary)
-                  .margin({ left: 8 })
+                // 类型标签
+                Row() {
+                  Text(this.getTypeInfo(bottle.type).icon)
+                    .fontSize(12)
+                  Text(this.getTypeInfo(bottle.type).label)
+                    .fontSize(11)
+                    .fontColor('#64748B')
+                    .margin({ left: 4 })
+                }
+                .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+                .backgroundColor(this.getTypeInfo(bottle.type).color)
+                .borderRadius(10)
+
                 Blank()
+
                 Text(this.formatTime(bottle.createdAt))
-                  .fontSize(FontSizes.small)
-                  .fontColor(Colors.textQuaternary)
+                  .fontSize(11)
+                  .fontColor('#94A3B8')
               }
               .width('100%')
-              .margin({ bottom: 12 })
 
               Text(bottle.content)
-                .fontSize(FontSizes.body)
-                .fontColor(Colors.textPrimary)
+                .fontSize(14)
+                .fontColor('#1E293B')
                 .lineHeight(22)
-                .width('100%')
+                .margin({ top: 12 })
 
               Row() {
-                Text(`发自 ${bottle.senderCity}`)
-                  .fontSize(FontSizes.mini)
-                  .fontColor(Colors.textTertiary)
+                Text(`📍 ${bottle.senderCity}`)
+                  .fontSize(11)
+                  .fontColor('#94A3B8')
+
+                Blank()
+
+                Row() {
+                  Text('💬 0')
+                    .fontSize(11)
+                    .fontColor('#94A3B8')
+                }
               }
               .width('100%')
               .margin({ top: 12 })
             }
             .width('100%')
-            .padding(Spacing.cardPadding)
-            .backgroundColor(Colors.bgPrimary)
-            .borderRadius(Radius.card)
-          }
-          .margin({ bottom: Spacing.cardMargin })
-        })
+            .padding(16)
+            .backgroundColor('rgba(255,255,255,0.9)')
+            .borderRadius(16)
+          })
+        }
+        .padding({ left: 20, right: 20, top: 12, bottom: 80 })
       }
-      .width('100%')
-      .height('100%')
-      .padding({ left: Spacing.pagePadding, right: Spacing.pagePadding, top: 16, bottom: 16 })
+      .layoutWeight(1)
       .scrollBar(BarState.Off)
     } else {
       Column() {
-        Text('🍾')
-          .fontSize(60)
-          .opacity(0.5)
-        Text('还没有投过漂流瓶')
-          .fontSize(FontSizes.body)
-          .fontColor(Colors.textTertiary)
-          .margin({ top: 16 })
-        Button('去投一个')
-          .fontSize(FontSizes.bodySmall)
-          .fontColor(Colors.primary)
-          .backgroundColor(Colors.primaryLightest)
-          .borderRadius(Radius.full)
-          .height(36)
-          .padding({ left: 24, right: 24 })
-          .margin({ top: 16 })
-          .onClick(() => {
-            this.currentTab = 1;
-          })
+        Blank()
+        Column({ space: 12 }) {
+          Text('🍾')
+            .fontSize(60)
+            .opacity(0.6)
+          Text('还没有投过漂流瓶')
+            .fontSize(15)
+            .fontColor('rgba(255,255,255,0.8)')
+          Row() {
+            Text('去投一个')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#0369A1')
+          }
+          .padding({ left: 24, right: 24, top: 10, bottom: 10 })
+          .backgroundColor('rgba(255,255,255,0.9)')
+          .borderRadius(20)
+          .onClick(() => { this.currentTab = 1; })
+        }
+        .alignItems(HorizontalAlign.Center)
+        Blank()
       }
       .width('100%')
       .layoutWeight(1)
-      .justifyContent(FlexAlign.Center)
     }
   }
 }
