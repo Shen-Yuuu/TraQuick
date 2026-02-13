@@ -1,0 +1,23 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/auth/LoginPage",
+    "pages/auth/RegisterPage",
+    "pages/explore/ExplorePage",
+    "pages/explore/CityDetailPage",
+    "pages/explore/DriftBottlePage",
+    "pages/explore/TimeCapsulePage",
+    "pages/explore/BottleResultPage",
+    "pages/community/CommunityPage",
+    "pages/community/PostDetailPage",
+    "pages/community/ImagePreviewPage",
+    "pages/community/UserProfilePage",
+    "pages/publish/PublishPostPage",
+    "pages/publish/DriftBottlePage",
+    "pages/publish/TimeCapsulePage",
+    "pages/message/MessagePage",
+    "pages/profile/ProfilePage",
+    "pages/profile/SettingsPage",
+    "pages/profile/EditProfilePage"
+  ]
+}

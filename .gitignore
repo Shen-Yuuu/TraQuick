@@ -1,0 +1,29 @@
+# 构建产物
+/build
+/entry/build
+/.preview
+/oh_modules
+
+# IDE 配置（可选择是否忽略）
+/.idea
+*.iml
+
+# 本地签名文件（重要！不要上传）
+*.p12
+*.cer
+*.csr
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+
+# Node
+node_modules/
+package-lock.json
+oh-package-lock.json5
+
+# UI设计稿
+/界面UI设计/
