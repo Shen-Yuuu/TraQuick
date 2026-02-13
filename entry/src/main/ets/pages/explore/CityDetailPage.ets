@@ -102,10 +102,18 @@ struct CityDetailPage {
   @State currentTab: number = 0;
   @State scrollY: number = 0;
   @State imageScale: number = 1.3;
-
+  @State communitySubTab: number = 1;
   @State cityPosts: Post[] = [];
 
-  // 在 aboutToAppear 的最后加载城市相关动态
+  private scroller: Scroller = new Scroller();
+
+  private tabs: CityTabItem[] = [
+    { title: '城市' },
+    { title: '社区' },
+    { title: '驴友' },
+    { title: '攻略' },
+  ];
+
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, Object>;
     if (params) {
@@ -116,18 +124,29 @@ struct CityDetailPage {
         this.cityId = params['cityId'] as string;
       }
     }
-    // 加载该城市的动态
     this.loadCityPosts();
   }
 
   private loadCityPosts(): void {
-    // 过滤出该城市的动态
     this.cityPosts = mockPosts.filter((post: Post) => {
       return post.location !== undefined && post.location.cityName === this.cityName;
     });
-    // 如果该城市没有动态，展示所有动态作为推荐
     if (this.cityPosts.length === 0) {
       this.cityPosts = mockPosts;
+    }
+  }
+
+  private updateImageEffect(): void {
+    if (this.scrollY <= 0) {
+      this.imageScale = 1.3 + Math.abs(this.scrollY) / 800;
+      if (this.imageScale > 1.4) {
+        this.imageScale = 1.4;
+      }
+    } else {
+      this.imageScale = 1.3 - this.scrollY / 1500;
+      if (this.imageScale < 1.0) {
+        this.imageScale = 1.0;
+      }
     }
   }
 
@@ -136,13 +155,22 @@ struct CityDetailPage {
     if (index !== -1) {
       const source = this.cityPosts[index];
       const updated: Post = {
-        id: source.id, author: source.author, content: source.content,
-        images: source.images, video: source.video, location: source.location,
-        tags: source.tags, likeCount: source.likeCount + (source.isLiked ? -1 : 1),
-        commentCount: source.commentCount, shareCount: source.shareCount,
-        collectCount: source.collectCount, isLiked: !source.isLiked,
-        isCollected: source.isCollected, createdAt: source.createdAt,
-        type: source.type, hotComments: source.hotComments,
+        id: source.id,
+        author: source.author,
+        content: source.content,
+        images: source.images,
+        video: source.video,
+        location: source.location,
+        tags: source.tags,
+        likeCount: source.likeCount + (source.isLiked ? -1 : 1),
+        commentCount: source.commentCount,
+        shareCount: source.shareCount,
+        collectCount: source.collectCount,
+        isLiked: !source.isLiked,
+        isCollected: source.isCollected,
+        createdAt: source.createdAt,
+        type: source.type,
+        hotComments: source.hotComments,
       };
       this.cityPosts[index] = updated;
     }
@@ -180,57 +208,29 @@ struct CityDetailPage {
     return `${count}`;
   }
 
-  private scroller: Scroller = new Scroller();
-
-  private tabs: CityTabItem[] = [
-    { title: '城市' },
-    { title: '社区' },
-    { title: '驴友' },
-    { title: '攻略' },
-  ];
-
-
-  /**
-   * 根据滚动位置计算背景图缩放
-   * 初始状态（抽屉在底部）：图片放大到1.3倍，显示局部
-   * 上滑（内容覆盖背景）：图片逐渐缩小到1.0倍，显示全貌
-   */
-  private updateImageEffect(): void {
-    // scrollY = 0 时抽屉在最底部（占位80%），图片最大
-    // scrollY 越大，抽屉越往上滑，图片越小
-    // 占位80%的屏幕，大约滑动到一半时图片就该到1.0了
-
-    if (this.scrollY <= 0) {
-      // 下拉超出：继续放大，最大1.4
-      this.imageScale = 1.3 + Math.abs(this.scrollY) / 800;
-      if (this.imageScale > 1.4) {
-        this.imageScale = 1.4;
-      }
-    } else {
-      // 上滑：从1.3逐渐缩小到1.0
-      this.imageScale = 1.3 - this.scrollY / 1500;
-      if (this.imageScale < 1.0) {
-        this.imageScale = 1.0;
-      }
-    }
+  private getImageColor(index: number): string {
+    const colors: string[] = ['#E0F2FE', '#CFFAFE', '#BAE6FD', '#A5F3FC', '#BAE6FD', '#D1D5DB'];
+    return colors[index % colors.length];
   }
+
+  private getImageColorEnd(index: number): string {
+    const colors: string[] = ['#7DD3FC', '#4F46E5', '#38BDF8', '#6366F1', '#38BDF8', '#6B7280'];
+    return colors[index % colors.length];
+  }
+
+  // ==================== 主布局 ====================
 
   build() {
     Stack() {
-      // ① 背景图（全屏固定，带动效）
       this.BackgroundImage()
 
-      // ② 可滚动内容区域（抽屉）
       Scroll(this.scroller) {
         Column() {
-          // 占位空间（90%屏幕高度，让背景图充分露出）
           Column()
             .width('100%')
             .height('80%')
 
-          // 内容卡片区域
           Column() {
-            // 拖拽指示条
             Column()
               .width(40)
               .height(4)
@@ -238,10 +238,8 @@ struct CityDetailPage {
               .backgroundColor('rgba(0,0,0,0.15)')
               .margin({ top: 12, bottom: 16 })
 
-            // 城市名称头部
             this.CityHeader()
 
-            // Tab 内容
             if (this.currentTab === 0) {
               this.CityInfoContent()
             } else if (this.currentTab === 1) {
@@ -270,10 +268,7 @@ struct CityDetailPage {
         this.updateImageEffect();
       })
 
-      // ③ 悬浮顶部按钮
       this.FloatingHeader()
-
-      // ④ 悬浮底部 Tab 栏
       this.FloatingTabBar()
     }
     .width('100%')
@@ -281,12 +276,11 @@ struct CityDetailPage {
     .backgroundColor('#000000')
   }
 
-  // ==================== 背景图（全屏 + 动效） ====================
+  // ==================== 背景图 ====================
 
   @Builder
   BackgroundImage() {
     Stack() {
-      // 全屏背景图 - 始终 >= 1.0 倍，不会有黑边
       Image($r('app.media.paris'))
         .width('100%')
         .height('100%')
@@ -297,7 +291,6 @@ struct CityDetailPage {
           curve: Curve.EaseOut
         })
 
-      // 底部渐变蒙版
       Column()
         .width('100%')
         .height('25%')
@@ -317,12 +310,11 @@ struct CityDetailPage {
     .clip(true)
   }
 
-  // ==================== 悬浮顶部按钮（白底黑字） ====================
+  // ==================== 悬浮顶部按钮 ====================
 
   @Builder
   FloatingHeader() {
     Row() {
-      // 返回按钮
       Column() {
         Text('←')
           .fontSize(22)
@@ -340,7 +332,6 @@ struct CityDetailPage {
 
       Blank()
 
-      // 更多按钮
       Column() {
         Text('⋯')
           .fontSize(20)
@@ -440,9 +431,7 @@ struct CityDetailPage {
           .alignItems(HorizontalAlign.Center)
           .justifyContent(FlexAlign.Center)
           .height('100%')
-          .onClick(() => {
-            this.currentTab = index;
-          })
+          .onClick(() => { this.currentTab = index; })
         })
       }
       .width('100%')
@@ -464,256 +453,157 @@ struct CityDetailPage {
   @Builder
   CityInfoContent() {
     Column({ space: 16 }) {
-      // 城市简介
       Column() {
         Row() {
-          Text('🏙️')
-            .fontSize(18)
-          Text('城市简介')
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ left: 8 })
-        }
-        .width('100%')
-        .margin({ bottom: 14 })
-
-        Text(MOCK_CITY_INFO.description)
-          .fontSize(14)
-          .fontColor('#475569')
-          .lineHeight(24)
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(16)
+          Text('🏙️').fontSize(18)
+          Text('城市简介').fontSize(17).fontWeight(FontWeight.Bold).fontColor('#1E293B').margin({ left: 8 })
+        }.width('100%').margin({ bottom: 14 })
+        Text(MOCK_CITY_INFO.description).fontSize(14).fontColor('#475569').lineHeight(24)
+      }.width('100%').padding(16).backgroundColor('#FFFFFF').borderRadius(16)
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
 
-      // 基本信息
       Column() {
         Row() {
-          Text('📋')
-            .fontSize(18)
-          Text('基本信息')
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ left: 8 })
-        }
-        .width('100%')
-        .margin({ bottom: 14 })
-
+          Text('📋').fontSize(18)
+          Text('基本信息').fontSize(17).fontWeight(FontWeight.Bold).fontColor('#1E293B').margin({ left: 8 })
+        }.width('100%').margin({ bottom: 14 })
         ForEach(MOCK_BASIC_INFO, (info: CityBasicInfo, index: number) => {
           Row() {
             Row() {
-              Text(info.icon)
-                .fontSize(16)
-              Text(info.label)
-                .fontSize(14)
-                .fontColor('#64748B')
-                .margin({ left: 8 })
+              Text(info.icon).fontSize(16)
+              Text(info.label).fontSize(14).fontColor('#64748B').margin({ left: 8 })
             }
-
             Blank()
-
-            Text(info.value)
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#1E293B')
-          }
-          .width('100%')
-          .padding({ top: 12, bottom: 12 })
-          .border({
-            width: { bottom: index < MOCK_BASIC_INFO.length - 1 ? 1 : 0 },
-            color: '#F1F5F9'
-          })
+            Text(info.value).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#1E293B')
+          }.width('100%').padding({ top: 12, bottom: 12 })
+          .border({ width: { bottom: index < MOCK_BASIC_INFO.length - 1 ? 1 : 0 }, color: '#F1F5F9' })
         })
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(16)
+      }.width('100%').padding(16).backgroundColor('#FFFFFF').borderRadius(16)
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
 
-      // 最佳旅行季节
       Column() {
         Row() {
-          Text('📅')
-            .fontSize(18)
-          Text('最佳旅行季节')
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ left: 8 })
-        }
-        .width('100%')
-        .margin({ bottom: 14 })
-
+          Text('📅').fontSize(18)
+          Text('最佳旅行季节').fontSize(17).fontWeight(FontWeight.Bold).fontColor('#1E293B').margin({ left: 8 })
+        }.width('100%').margin({ bottom: 14 })
         Column() {
-          Text('🌸')
-            .fontSize(32)
-          Text(MOCK_CITY_INFO.bestSeason)
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ top: 8 })
-          Text('春夏两季气候宜人，适合户外观光')
-            .fontSize(12)
-            .fontColor('#64748B')
-            .margin({ top: 4 })
-        }
-        .alignItems(HorizontalAlign.Center)
-        .width('100%')
-        .padding({ top: 8, bottom: 8 })
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(16)
+          Text('🌸').fontSize(32)
+          Text(MOCK_CITY_INFO.bestSeason).fontSize(16).fontWeight(FontWeight.Bold).fontColor('#1E293B').margin({ top: 8 })
+          Text('春夏两季气候宜人，适合户外观光').fontSize(12).fontColor('#64748B').margin({ top: 4 })
+        }.alignItems(HorizontalAlign.Center).width('100%').padding({ top: 8, bottom: 8 })
+      }.width('100%').padding(16).backgroundColor('#FFFFFF').borderRadius(16)
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
 
-      // 著名景点
       Column() {
         Row() {
-          Text('🗺️')
-            .fontSize(18)
-          Text('著名景点')
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ left: 8 })
-        }
-        .width('100%')
-        .margin({ bottom: 14 })
-
+          Text('🗺️').fontSize(18)
+          Text('著名景点').fontSize(17).fontWeight(FontWeight.Bold).fontColor('#1E293B').margin({ left: 8 })
+        }.width('100%').margin({ bottom: 14 })
         Column({ space: 10 }) {
           ForEach(MOCK_ATTRACTIONS, (item: AttractionItem) => {
             Row() {
-              Column() {
-                Text(item.icon)
-                  .fontSize(28)
-              }
-              .width(56)
-              .height(56)
-              .backgroundColor('#F1F5F9')
-              .borderRadius(12)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-
+              Column() { Text(item.icon).fontSize(28) }
+              .width(56).height(56).backgroundColor('#F1F5F9').borderRadius(12)
+              .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
               Column() {
                 Row() {
-                  Text(item.name)
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor('#1E293B')
-
+                  Text(item.name).fontSize(15).fontWeight(FontWeight.Medium).fontColor('#1E293B')
                   Blank()
-
                   Row() {
-                    Text('⭐')
-                      .fontSize(11)
-                    Text(item.rating)
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor('#F59E0B')
-                      .margin({ left: 2 })
+                    Text('⭐').fontSize(11)
+                    Text(item.rating).fontSize(12).fontWeight(FontWeight.Medium).fontColor('#F59E0B').margin({ left: 2 })
                   }
-                }
-                .width('100%')
-
-                Text(item.desc)
-                  .fontSize(12)
-                  .fontColor('#94A3B8')
-                  .margin({ top: 4 })
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Start)
-              .margin({ left: 12 })
-            }
-            .width('100%')
-            .padding(10)
-            .backgroundColor('#FAFBFC')
-            .borderRadius(12)
+                }.width('100%')
+                Text(item.desc).fontSize(12).fontColor('#94A3B8').margin({ top: 4 })
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              }.layoutWeight(1).alignItems(HorizontalAlign.Start).margin({ left: 12 })
+            }.width('100%').padding(10).backgroundColor('#FAFBFC').borderRadius(12)
           })
         }
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(16)
+      }.width('100%').padding(16).backgroundColor('#FFFFFF').borderRadius(16)
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
 
-      // 美食推荐
       Column() {
         Row() {
-          Text('🍽️')
-            .fontSize(18)
-          Text('美食推荐')
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ left: 8 })
-        }
-        .width('100%')
-        .margin({ bottom: 14 })
-
+          Text('🍽️').fontSize(18)
+          Text('美食推荐').fontSize(17).fontWeight(FontWeight.Bold).fontColor('#1E293B').margin({ left: 8 })
+        }.width('100%').margin({ bottom: 14 })
         Scroll() {
           Row({ space: 12 }) {
             ForEach(MOCK_FOODS, (food: FoodItem) => {
               Column() {
-                Text(food.icon)
-                  .fontSize(36)
-                  .margin({ bottom: 8 })
-
-                Text(food.name)
-                  .fontSize(13)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor('#1E293B')
-
-                Text(food.desc)
-                  .fontSize(11)
-                  .fontColor('#94A3B8')
-                  .margin({ top: 4 })
-                  .maxLines(2)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .textAlign(TextAlign.Center)
-              }
-              .width(120)
-              .padding(12)
-              .backgroundColor('#FAFBFC')
-              .borderRadius(12)
-              .alignItems(HorizontalAlign.Center)
+                Text(food.icon).fontSize(36).margin({ bottom: 8 })
+                Text(food.name).fontSize(13).fontWeight(FontWeight.Medium).fontColor('#1E293B')
+                Text(food.desc).fontSize(11).fontColor('#94A3B8').margin({ top: 4 })
+                  .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).textAlign(TextAlign.Center)
+              }.width(120).padding(12).backgroundColor('#FAFBFC').borderRadius(12).alignItems(HorizontalAlign.Center)
             })
           }
-        }
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(16)
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+      }.width('100%').padding(16).backgroundColor('#FFFFFF').borderRadius(16)
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
 
-      Column()
-        .height(20)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
+      Column().height(20)
+    }.width('100%').padding({ left: 16, right: 16 })
   }
 
   // ==================== 社区 Tab ====================
 
   @Builder
   CommunityContent() {
-    Column({ space: 0 }) {
+    Column() {
+      this.CommunitySubTabBar()
+
+      if (this.communitySubTab === 1) {
+        this.CommunityPostList()
+      } else {
+        this.CommunityVideoList()
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  CommunitySubTabBar() {
+    Row() {
+      ForEach(['视频', '社区'], (tab: string, index: number) => {
+        Column() {
+          Text(tab)
+            .fontSize(14)
+            .fontWeight(this.communitySubTab === index ? FontWeight.Bold : FontWeight.Medium)
+            .fontColor(this.communitySubTab === index ? '#0284C7' : '#94A3B8')
+
+          if (this.communitySubTab === index) {
+            Column()
+              .width(18)
+              .height(3)
+              .borderRadius(1.5)
+              .backgroundColor('#38BDF8')
+              .margin({ top: 6 })
+          } else {
+            Column().height(9)
+          }
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Center)
+        .padding({ top: 12, bottom: 4 })
+        .onClick(() => { this.communitySubTab = index; })
+      })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+    .backgroundColor('#FFFFFF')
+    .borderRadius(12)
+    .margin({ left: 16, right: 16, bottom: 12 })
+    .shadow({ radius: 4, color: 'rgba(0,0,0,0.03)', offsetY: 1 })
+  }
+
+  @Builder
+  CommunityPostList() {
+    Column() {
       if (this.cityPosts.length > 0) {
         ForEach(this.cityPosts, (post: Post) => {
-          // 和主界面一致的帖子卡片
           Row() {
-            // 左侧头像
             Column() {
               Text(post.author.nickname.charAt(0))
                 .fontSize(16)
@@ -729,11 +619,9 @@ struct CityDetailPage {
             })
             .justifyContent(FlexAlign.Center)
             .margin({ right: 12 })
-            .onClick(() => this.navigateToUser(post.author.id))
+            .onClick(() => { this.navigateToUser(post.author.id); })
 
-            // 右侧内容
             Column() {
-              // 用户名
               Row() {
                 Column() {
                   Text(post.author.nickname)
@@ -746,7 +634,7 @@ struct CityDetailPage {
                     .margin({ top: 1 })
                 }
                 .alignItems(HorizontalAlign.Start)
-                .onClick(() => this.navigateToUser(post.author.id))
+                .onClick(() => { this.navigateToUser(post.author.id); })
 
                 Blank()
 
@@ -756,7 +644,6 @@ struct CityDetailPage {
               }
               .width('100%')
 
-              // 文本内容
               Text(post.content)
                 .fontSize(14)
                 .fontColor('#333333')
@@ -765,14 +652,12 @@ struct CityDetailPage {
                 .width('100%')
                 .maxLines(4)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .onClick(() => this.navigateToPostDetail(post))
+                .onClick(() => { this.navigateToPostDetail(post); })
 
-              // 图片网格
               if (post.images && post.images.length > 0) {
                 this.CityPostImageGrid(post)
               }
 
-              // 位置 + 时间
               Row() {
                 if (post.location && post.location.cityName) {
                   Text(post.location.cityName)
@@ -787,7 +672,6 @@ struct CityDetailPage {
               .width('100%')
               .margin({ top: 10 })
 
-              // 热门评论
               if (post.hotComments && post.hotComments.length > 0) {
                 Column() {
                   ForEach(post.hotComments.slice(0, 2), (comment: PostComment) => {
@@ -812,7 +696,7 @@ struct CityDetailPage {
                       .fontSize(11)
                       .fontColor('#94A3B8')
                       .margin({ top: 2 })
-                      .onClick(() => this.navigateToPostDetail(post))
+                      .onClick(() => { this.navigateToPostDetail(post); })
                   }
                 }
                 .width('100%')
@@ -820,10 +704,9 @@ struct CityDetailPage {
                 .backgroundColor('#F8FAFC')
                 .borderRadius(8)
                 .margin({ top: 8 })
-                .onClick(() => this.navigateToPostDetail(post))
+                .onClick(() => { this.navigateToPostDetail(post); })
               }
 
-              // 操作按钮栏
               Row() {
                 Row() {
                   Text(post.isLiked ? '❤️' : '🤍')
@@ -835,7 +718,7 @@ struct CityDetailPage {
                       .margin({ left: 4 })
                   }
                 }
-                .onClick(() => this.onPostLike(post))
+                .onClick(() => { this.onPostLike(post); })
 
                 Row() {
                   Text('💬')
@@ -847,7 +730,7 @@ struct CityDetailPage {
                       .margin({ left: 4 })
                   }
                 }
-                .onClick(() => this.navigateToPostDetail(post))
+                .onClick(() => { this.navigateToPostDetail(post); })
 
                 Row() {
                   Text('↗️')
@@ -877,16 +760,8 @@ struct CityDetailPage {
         })
       } else {
         Column() {
-          Text('📭')
-            .fontSize(48)
-            .margin({ bottom: 12 })
-          Text('该城市暂无动态')
-            .fontSize(15)
-            .fontColor('#94A3B8')
-          Text('去发布第一条吧')
-            .fontSize(13)
-            .fontColor('#CBD5E1')
-            .margin({ top: 4 })
+          Text('📭').fontSize(48).margin({ bottom: 12 })
+          Text('该城市暂无动态').fontSize(15).fontColor('#94A3B8')
         }
         .width('100%')
         .height(200)
@@ -901,6 +776,93 @@ struct CityDetailPage {
     .width('100%')
     .padding({ left: 16, right: 16 })
   }
+
+  // ==================== 视频列表 ====================
+
+  @Builder
+  CommunityVideoList() {
+    Column({ space: 12 }) {
+      this.VideoCard('🗼', '巴黎铁塔的日落', '旅行摄影师', '3.1w', '2341')
+      this.VideoCard('🌃', '巴黎塞纳河夜景', '夜景达人', '1.8w', '956')
+      this.VideoCard('🥐', '巴黎美食探店', '美食家大宝', '2.5w', '1876')
+      this.VideoCard('🎨', '卢浮宫一日游', '艺术旅人', '1.2w', '654')
+      Column().height(20)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  VideoCard(emoji: string, title: string, author: string, views: string, likes: string) {
+    Column() {
+      Stack() {
+        Column()
+          .width('100%')
+          .height(180)
+          .borderRadius({ topLeft: 16, topRight: 16 })
+          .linearGradient({
+            direction: GradientDirection.RightBottom,
+            colors: [['#E0F2FE', 0], ['#38BDF8', 1]]
+          })
+
+        Text(emoji)
+          .fontSize(56)
+
+        Column() {
+          Text('▶')
+            .fontSize(22)
+            .fontColor('#FFFFFF')
+        }
+        .width(52)
+        .height(52)
+        .backgroundColor('rgba(0,0,0,0.4)')
+        .borderRadius(26)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+
+        Row() {
+          Text('▶').fontSize(10).fontColor('#FFFFFF')
+          Text(views).fontSize(11).fontColor('#FFFFFF').margin({ left: 4 })
+        }
+        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .borderRadius(10)
+        .position({ x: 12, y: 148 })
+      }
+
+      Column() {
+        Text(title)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#1E293B')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Row() {
+          Row() {
+            Text('👤').fontSize(12)
+            Text(author).fontSize(12).fontColor('#94A3B8').margin({ left: 4 })
+          }
+          Blank()
+          Row() {
+            Text('❤️').fontSize(12)
+            Text(likes).fontSize(12).fontColor('#94A3B8').margin({ left: 4 })
+          }
+        }
+        .width('100%')
+        .margin({ top: 8 })
+      }
+      .width('100%')
+      .padding(14)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .backgroundColor('#FFFFFF')
+    .borderRadius(16)
+    .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
+  }
+
+  // ==================== 图片网格 ====================
 
   @Builder
   CityPostImageGrid(post: Post) {
@@ -927,9 +889,13 @@ struct CityDetailPage {
           }
           if (post.images.length > 3) {
             Row({ space: 4 }) {
-              ForEach(post.images.slice(3, 6), (img: string, idx: number) => {
-                this.CityImageItem(post.images, idx + 3, 78, 78)
-              })
+              this.CityImageItem(post.images, 3, 78, 78)
+              if (post.images.length > 4) {
+                this.CityImageItem(post.images, 4, 78, 78)
+              }
+              if (post.images.length > 5) {
+                this.CityImageItem(post.images, 5, 78, 78)
+              }
             }
           }
         }
@@ -960,16 +926,6 @@ struct CityDetailPage {
     })
   }
 
-  private getImageColor(index: number): string {
-    const colors: string[] = ['#E0F2FE', '#CFFAFE', '#BAE6FD', '#A5F3FC', '#BAE6FD', '#D1D5DB'];
-    return colors[index % colors.length];
-  }
-
-  private getImageColorEnd(index: number): string {
-    const colors: string[] = ['#7DD3FC', '#4F46E5', '#38BDF8', '#6366F1', '#38BDF8', '#6B7280'];
-    return colors[index % colors.length];
-  }
-
   // ==================== 驴友 Tab ====================
 
   @Builder
@@ -978,144 +934,58 @@ struct CityDetailPage {
       Column() {
         Row() {
           Column()
-            .width(8)
-            .height(8)
-            .borderRadius(4)
-            .backgroundColor('#22C55E')
-          Text('在此处')
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ left: 8 })
-          Text('(3人)')
-            .fontSize(13)
-            .fontColor('#94A3B8')
-            .margin({ left: 4 })
-        }
-        .width('100%')
-        .margin({ bottom: 14 })
+            .width(8).height(8).borderRadius(4).backgroundColor('#22C55E')
+          Text('在此处').fontSize(16).fontWeight(FontWeight.Bold).fontColor('#1E293B').margin({ left: 8 })
+          Text('(3人)').fontSize(13).fontColor('#94A3B8').margin({ left: 4 })
+        }.width('100%').margin({ bottom: 14 })
 
         ForEach([1, 2, 3], (item: number) => {
           Row() {
-            Column() {
-              Text('🧑‍✈️')
-                .fontSize(18)
-            }
-            .width(44)
-            .height(44)
-            .backgroundColor('#DBEAFE')
-            .borderRadius(22)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
+            Column() { Text('🧑‍✈️').fontSize(18) }
+            .width(44).height(44).backgroundColor('#DBEAFE').borderRadius(22)
+            .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
 
             Column() {
-              Text(`旅行者 ${item}`)
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#1E293B')
-              Text('正在探索埃菲尔铁塔附近')
-                .fontSize(12)
-                .fontColor('#94A3B8')
-                .margin({ top: 2 })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .margin({ left: 12 })
-            .layoutWeight(1)
+              Text(`旅行者 ${item}`).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#1E293B')
+              Text('正在探索埃菲尔铁塔附近').fontSize(12).fontColor('#94A3B8').margin({ top: 2 })
+            }.alignItems(HorizontalAlign.Start).margin({ left: 12 }).layoutWeight(1)
 
             Row() {
-              Text('打招呼')
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#38BDF8')
-            }
-            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-            .backgroundColor('#EFF6FF')
-            .borderRadius(16)
-          }
-          .width('100%')
-          .padding(12)
-          .backgroundColor('#FAFBFC')
-          .borderRadius(12)
-          .margin({ bottom: 8 })
+              Text('打招呼').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#38BDF8')
+            }.padding({ left: 14, right: 14, top: 8, bottom: 8 }).backgroundColor('#EFF6FF').borderRadius(16)
+          }.width('100%').padding(12).backgroundColor('#FAFBFC').borderRadius(12).margin({ bottom: 8 })
         })
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(16)
+      }.width('100%').padding(16).backgroundColor('#FFFFFF').borderRadius(16)
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
 
       Column() {
         Row() {
-          Text('📅')
-            .fontSize(16)
-          Text('计划中')
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ left: 8 })
-          Text('(12人)')
-            .fontSize(13)
-            .fontColor('#94A3B8')
-            .margin({ left: 4 })
-        }
-        .width('100%')
-        .margin({ bottom: 14 })
+          Text('📅').fontSize(16)
+          Text('计划中').fontSize(16).fontWeight(FontWeight.Bold).fontColor('#1E293B').margin({ left: 8 })
+          Text('(12人)').fontSize(13).fontColor('#94A3B8').margin({ left: 4 })
+        }.width('100%').margin({ bottom: 14 })
 
         ForEach([1, 2], (item: number) => {
           Row() {
-            Column() {
-              Text('🧳')
-                .fontSize(18)
-            }
-            .width(44)
-            .height(44)
-            .backgroundColor('#FEF3C7')
-            .borderRadius(22)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
+            Column() { Text('🧳').fontSize(18) }
+            .width(44).height(44).backgroundColor('#FEF3C7').borderRadius(22)
+            .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
 
             Column() {
-              Text(`计划者 ${item}`)
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#1E293B')
-              Text('计划 3月15日 出发')
-                .fontSize(12)
-                .fontColor('#94A3B8')
-                .margin({ top: 2 })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .margin({ left: 12 })
-            .layoutWeight(1)
+              Text(`计划者 ${item}`).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#1E293B')
+              Text('计划 3月15日 出发').fontSize(12).fontColor('#94A3B8').margin({ top: 2 })
+            }.alignItems(HorizontalAlign.Start).margin({ left: 12 }).layoutWeight(1)
 
             Row() {
-              Text('结伴')
-                .fontSize(12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#F59E0B')
-            }
-            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-            .backgroundColor('#FFFBEB')
-            .borderRadius(16)
-          }
-          .width('100%')
-          .padding(12)
-          .backgroundColor('#FAFBFC')
-          .borderRadius(12)
-          .margin({ bottom: 8 })
+              Text('结伴').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#F59E0B')
+            }.padding({ left: 14, right: 14, top: 8, bottom: 8 }).backgroundColor('#FFFBEB').borderRadius(16)
+          }.width('100%').padding(12).backgroundColor('#FAFBFC').borderRadius(12).margin({ bottom: 8 })
         })
-      }
-      .width('100%')
-      .padding(16)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(16)
+      }.width('100%').padding(16).backgroundColor('#FFFFFF').borderRadius(16)
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
 
       Column().height(20)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
+    }.width('100%').padding({ left: 16, right: 16 })
   }
 
   // ==================== 攻略 Tab ====================
@@ -1124,16 +994,9 @@ struct CityDetailPage {
   GuideContent() {
     Column({ space: 16 }) {
       Column() {
-        Text('📝')
-          .fontSize(48)
-          .margin({ bottom: 12 })
-        Text('攻略功能开发中')
-          .fontSize(15)
-          .fontColor('#94A3B8')
-        Text('敬请期待')
-          .fontSize(13)
-          .fontColor('#CBD5E1')
-          .margin({ top: 4 })
+        Text('📝').fontSize(48).margin({ bottom: 12 })
+        Text('攻略功能开发中').fontSize(15).fontColor('#94A3B8')
+        Text('敬请期待').fontSize(13).fontColor('#CBD5E1').margin({ top: 4 })
       }
       .width('100%')
       .height(200)
@@ -1144,8 +1007,6 @@ struct CityDetailPage {
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
 
       Column().height(20)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16 })
+    }.width('100%').padding({ left: 16, right: 16 })
   }
 }
