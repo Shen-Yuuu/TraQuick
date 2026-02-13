@@ -1,9 +1,8 @@
 ﻿/**
  * 城市卡片弹窗组件 - 盲盒摇一摇结果
- * 符合设计图样式
+ * 简约沉浸式设计
  */
 
-import { Colors, FontSizes, Spacing, Radius } from '../../utils/Constants';
 import { City } from '../../models/City';
 
 @Component
@@ -14,99 +13,24 @@ export struct CityCardDialog {
   onClose: () => void = () => {};
   onShuffle: () => void = () => {};
 
-  // 城市地标映射
-  private getCityLandmark(): string {
-    const landmarks: Record<string, string> = {
-      '巴黎': '埃菲尔铁塔',
-      '东京': '东京铁塔',
-      '纽约': '自由女神像',
-      '伦敦': '大本钟',
-      '北京': '万里长城',
-      '上海': '东方明珠',
-      '成都': '大熊猫基地',
-      '西安': '兵马俑',
-      '黄山': '迎客松',
-    };
-    return landmarks[this.city.name] || '著名景点';
-  }
-
-  // 城市描述映射
-  private getCityDescription(): string {
-    const descriptions: Record<string, string> = {
-      '巴黎': '浪漫之都。在塞纳河畔感受法式优雅，在卢浮宫邂逅艺术瑰宝。',
-      '东京': '传统与现代的完美融合，在这里体验最前沿的潮流文化。',
-      '纽约': '不夜城的繁华，时代广场的霓虹，在这里追逐梦想。',
-      '伦敦': '雾都伦敦，皇室风范。感受英伦绅士的优雅与历史的厚重。',
-      '北京': '不到长城非好汉。体验千年的历史沉淀，感受中华文明的壮丽与雄浑。',
-      '上海': '魔都上海，东西方文化的交汇点，现代与复古完美融合。',
-      '成都': '天府之国，慢生活的代名词。品尝美食，看熊猫卖萌。',
-      '西安': '十三朝古都，穿越千年的历史记忆。',
-      '黄山': '五岳归来不看山，黄山归来不看岳。云海奇松，美不胜收。',
-    };
-    return descriptions[this.city.name] || this.city.description || '探索这座城市的独特魅力。';
-  }
-
   build() {
     if (this.isShow) {
       Stack() {
-        // 毛玻璃遮罩层
+        // 遮罩层
         Column()
           .width('100%')
           .height('100%')
-          .backgroundColor('rgba(0,0,0,0.5)')
-          .blur(20)
+          .backgroundColor('rgba(0,0,0,0.6)')
           .onClick(() => {
             this.isShow = false;
             this.onClose();
           })
 
-        // 顶部标签和关闭按钮
-        Row() {
-          // 3D EARTH VIEW 标签
-          Row() {
-            Column()
-              .width(8)
-              .height(8)
-              .borderRadius(4)
-              .backgroundColor('#38BDF8')
-            Text('3D EARTH VIEW')
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#FFFFFF')
-              .margin({ left: 8 })
-          }
-          .padding({ left: 16, right: 16, top: 10, bottom: 10 })
-          .backgroundColor('rgba(255,255,255,0.2)')
-          .borderRadius(20)
-
-          Blank()
-
-          // 关闭按钮
-          Column() {
-            Text('✕')
-              .fontSize(18)
-              .fontColor('#64748B')
-          }
-          .width(44)
-          .height(44)
-          .backgroundColor('#F1F5F9')
-          .borderRadius(22)
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            this.isShow = false;
-            this.onClose();
-          })
-        }
-        .width('100%')
-        .padding({ left: 20, right: 20, top: 56 })
-        .position({ x: 0, y: 0 })
-        .zIndex(10)
-
-        // 主卡片内容
+        // 主卡片
         Column() {
-          // 城市图片区域
+          // 上部：城市图片区域（无边框，与内容渐变融合）
           Stack() {
-            // 城市风景图背景
+            // 城市渐变背景
             Column()
               .width('100%')
               .height('100%')
@@ -114,237 +38,241 @@ export struct CityCardDialog {
                 direction: GradientDirection.Bottom,
                 colors: [
                   [this.getCityGradientStart(), 0],
+                  [this.getCityGradientMid(), 0.6],
                   [this.getCityGradientEnd(), 1]
                 ]
               })
-              .borderRadius(20)
 
-            // 城市图片占位（使用大emoji模拟）
-            Column() {
-              Text(this.getCityEmoji())
-                .fontSize(120)
-                .opacity(0.9)
-            }
-            .width('100%')
-            .height('100%')
-            .justifyContent(FlexAlign.Center)
-            .borderRadius(20)
+            // 城市 emoji
+            Text(this.getCityEmoji())
+              .fontSize(100)
+              .opacity(0.85)
+              .margin({ bottom: 40 })
 
-            // 图片底部渐变遮罩
+            // 底部渐变蒙版（与白色内容区融合）
             Column()
               .width('100%')
-              .height(80)
+              .height('50%')
               .linearGradient({
                 direction: GradientDirection.Top,
-                colors: [['rgba(0,0,0,0.3)', 0], ['transparent', 1]]
+                colors: [
+                  ['#FFFFFF', 0],
+                  ['rgba(255,255,255,0.8)', 0.3],
+                  ['rgba(255,255,255,0)', 1]
+                ]
               })
-              .position({ x: 0, y: '100%' })
-              .translate({ y: '-100%' })
-              .borderRadius({ bottomLeft: 20, bottomRight: 20 })
+              .position({ x: 0, y: '50%' })
           }
           .width('100%')
-          .height(280)
-          .borderRadius(20)
-          .shadow({ radius: 20, color: 'rgba(0,0,0,0.15)', offsetY: 8 })
+          .height(220)
 
-          // 城市名称
-          Text(this.city.name)
-            .fontSize(32)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#1E293B')
-            .margin({ top: 24 })
-
-          // 地标名称
-          Text(this.getCityLandmark())
-            .fontSize(16)
-            .fontColor('#38BDF8')
-            .margin({ top: 4 })
-
-          // 信息标签区
-          Row() {
-            // 距离标签
-            Row() {
-              Text('📍')
-                .fontSize(14)
-              Text(`距你 ${this.formatDistance()} km`)
-                .fontSize(13)
-                .fontColor('#64748B')
-                .margin({ left: 4 })
-            }
-            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-            .backgroundColor('#F1F5F9')
-            .borderRadius(20)
-
-            // 类型标签
-            Row() {
-              Text('🏛️')
-                .fontSize(14)
-              Text(this.getCityType())
-                .fontSize(13)
-                .fontColor('#64748B')
-                .margin({ left: 4 })
-            }
-            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-            .backgroundColor('#F1F5F9')
-            .borderRadius(20)
-            .margin({ left: 12 })
-          }
-          .margin({ top: 20 })
-
-          // 城市描述
-          Text(this.getCityDescription())
-            .fontSize(14)
-            .fontColor('#64748B')
-            .lineHeight(24)
-            .textAlign(TextAlign.Center)
-            .margin({ top: 20, left: 16, right: 16 })
-
-          // 操作按钮
+          // 下部：内容区域
           Column() {
-            // 立即前往按钮
-            Button() {
+            // 城市名 + 国家
+            Text(this.city.name)
+              .fontSize(28)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1E293B')
+
+            Text(`${this.city.country} · ${this.getCityType()}`)
+              .fontSize(13)
+              .fontColor('#94A3B8')
+              .margin({ top: 4 })
+
+            // 分隔线
+            Column()
+              .width(32)
+              .height(3)
+              .borderRadius(1.5)
+              .backgroundColor('#38BDF8')
+              .margin({ top: 16, bottom: 16 })
+
+            // 城市描述
+            Text(this.getCityDescription())
+              .fontSize(13)
+              .fontColor('#64748B')
+              .lineHeight(22)
+              .textAlign(TextAlign.Center)
+              .maxLines(3)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .padding({ left: 8, right: 8 })
+
+            // 信息标签
+            Row({ space: 8 }) {
+              this.InfoChip('📍', this.formatDistance())
+              this.InfoChip('👥', `${this.formatCount(this.city.visitorsCount)}人去过`)
+              this.InfoChip('📝', `${this.formatCount(this.city.postsCount)}篇`)
+            }
+            .margin({ top: 20 })
+
+            // 按钮组
+            Column({ space: 10 }) {
+              // 立即前往
               Row() {
-                Text('立即前往')
-                  .fontSize(16)
+                Text('探索这座城市')
+                  .fontSize(15)
                   .fontWeight(FontWeight.Bold)
                   .fontColor('#FFFFFF')
                 Text('→')
-                  .fontSize(16)
-                  .fontColor('#FFFFFF')
+                  .fontSize(15)
+                  .fontColor('rgba(255,255,255,0.8)')
                   .margin({ left: 8 })
               }
-            }
-            .width('100%')
-            .height(52)
-            .backgroundColor('#38BDF8')
-            .borderRadius(26)
-            .shadow({ radius: 12, color: 'rgba(14, 165, 233, 0.4)', offsetY: 4 })
-            .onClick(() => {
-              this.isShow = false;
-              this.onExplore();
-            })
+              .width('100%')
+              .height(48)
+              .justifyContent(FlexAlign.Center)
+              .linearGradient({
+                direction: GradientDirection.Right,
+                colors: [['#38BDF8', 0], ['#0EA5E9', 1]]
+              })
+              .borderRadius(24)
+              .shadow({ radius: 12, color: 'rgba(14,165,233,0.3)', offsetY: 4 })
+              .onClick(() => {
+                this.isShow = false;
+                this.onExplore();
+              })
 
-            // 再摇一次按钮
-            Button() {
+              // 再摇一次
               Row() {
-                Text('🔄')
-                  .fontSize(16)
-                Text('再摇一次')
+                Text('🎲')
                   .fontSize(15)
+                Text('换一个')
+                  .fontSize(14)
                   .fontColor('#64748B')
                   .margin({ left: 6 })
               }
+              .width('100%')
+              .height(44)
+              .justifyContent(FlexAlign.Center)
+              .backgroundColor('#F8FAFC')
+              .borderRadius(22)
+              .border({ width: 1, color: '#F1F5F9' })
+              .onClick(() => {
+                this.onShuffle();
+              })
             }
             .width('100%')
-            .height(48)
-            .backgroundColor('#FFFFFF')
-            .border({ width: 1.5, color: '#E2E8F0' })
-            .borderRadius(24)
-            .margin({ top: 12 })
-            .onClick(() => {
-              this.onShuffle();
-            })
+            .margin({ top: 24 })
           }
           .width('100%')
-          .padding({ left: 20, right: 20 })
-          .margin({ top: 28 })
+          .padding({ left: 24, right: 24, bottom: 24 })
+          .alignItems(HorizontalAlign.Center)
         }
-        .width('88%')
-        .padding({ top: 16, bottom: 28 })
+        .width('85%')
         .backgroundColor('#FFFFFF')
-        .borderRadius(28)
-        .shadow({ radius: 30, color: 'rgba(0,0,0,0.2)', offsetY: 10 })
+        .borderRadius(24)
+        .clip(true)
+        .shadow({ radius: 30, color: 'rgba(0,0,0,0.15)', offsetY: 10 })
 
-        // 底部提示
-        Text('TAP BACKGROUND TO CLOSE')
-          .fontSize(12)
-          .fontColor('rgba(255,255,255,0.6)')
-          .letterSpacing(1)
-          .position({ x: '50%', y: '95%' })
-          .translate({ x: '-50%' })
+        // 右上角关闭按钮（浮在卡片外）
+        Column() {
+          Text('✕')
+            .fontSize(16)
+            .fontColor('rgba(255,255,255,0.8)')
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(18)
+        .backgroundColor('rgba(255,255,255,0.15)')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .position({ x: '89%', y: '12%' })
+        .onClick(() => {
+          this.isShow = false;
+          this.onClose();
+        })
       }
       .width('100%')
       .height('100%')
     }
   }
 
-  getCityEmoji(): string {
-    const cityEmojis: Record<string, string> = {
-      '巴黎': '🗼',
-      '东京': '🗾',
-      '纽约': '🗽',
-      '伦敦': '🎡',
-      '北京': '🏯',
-      '上海': '🌃',
-      '成都': '🐼',
-      '西安': '🏛️',
-      '黄山': '⛰️',
-    };
-    return cityEmojis[this.city.name] || '🌍';
+  @Builder
+  InfoChip(icon: string, text: string) {
+    Row() {
+      Text(icon)
+        .fontSize(11)
+      Text(text)
+        .fontSize(11)
+        .fontColor('#64748B')
+        .margin({ left: 3 })
+    }
+    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+    .backgroundColor('#F8FAFC')
+    .borderRadius(14)
+    .border({ width: 0.5, color: '#F1F5F9' })
   }
 
-  getCityGradientStart(): string {
-    const gradients: Record<string, string> = {
-      '巴黎': '#FDB99B',
-      '东京': '#FF6B95',
-      '纽约': '#667EEA',
-      '伦敦': '#A8EDEA',
-      '北京': '#F6D365',
-      '上海': '#764BA2',
-      '成都': '#11998E',
-      '西安': '#C6FFDD',
-      '黄山': '#F093FB',
+  // ==================== 数据方法 ====================
+
+  private getCityEmoji(): string {
+    const map: Record<string, string> = {
+      '巴黎': '🗼', '东京': '🗾', '纽约': '🗽', '伦敦': '🎡',
+      '北京': '🏯', '上海': '🌃', '成都': '🐼', '西安': '🏛️', '黄山': '⛰️',
     };
-    return gradients[this.city.name] || '#667EEA';
+    return map[this.city.name] || '🌍';
   }
 
-  getCityGradientEnd(): string {
-    const gradients: Record<string, string> = {
-      '巴黎': '#FFE29F',
-      '东京': '#FF8A5B',
-      '纽约': '#764BA2',
-      '伦敦': '#Fed6E3',
-      '北京': '#FDA085',
-      '上海': '#667EEA',
-      '成都': '#38EF7D',
-      '西安': '#FBC2EB',
-      '黄山': '#F5576C',
+  private getCityGradientStart(): string {
+    const map: Record<string, string> = {
+      '巴黎': '#FDB99B', '东京': '#FF6B95', '纽约': '#667EEA', '伦敦': '#A8EDEA',
+      '北京': '#F6D365', '上海': '#764BA2', '成都': '#11998E', '西安': '#C6FFDD', '黄山': '#F093FB',
     };
-    return gradients[this.city.name] || '#764BA2';
+    return map[this.city.name] || '#667EEA';
   }
 
-  getCityType(): string {
-    const types: Record<string, string> = {
-      '巴黎': '浪漫之都',
-      '东京': '现代都市',
-      '纽约': '国际大都会',
-      '伦敦': '历史名城',
-      '北京': '历史古迹',
-      '上海': '魔幻都市',
-      '成都': '休闲之都',
-      '西安': '千年古都',
-      '黄山': '自然风光',
+  private getCityGradientMid(): string {
+    const map: Record<string, string> = {
+      '巴黎': '#FDCDA1', '东京': '#FF9A8B', '纽约': '#7B8CEA', '伦敦': '#C4F0E8',
+      '北京': '#F8DC7A', '上海': '#8B6CB2', '成都': '#2CB88A', '西安': '#D8FFE4', '黄山': '#F5A9D0',
     };
-    return types[this.city.name] || '热门城市';
+    return map[this.city.name] || '#8B8CEA';
   }
 
-  formatDistance(): string {
-    const distances: Record<string, number> = {
-      '巴黎': 8942,
-      '东京': 1876,
-      '纽约': 11234,
-      '伦敦': 8123,
-      '北京': 1240,
-      '上海': 1120,
-      '成都': 1580,
-      '西安': 1380,
-      '黄山': 680,
+  private getCityGradientEnd(): string {
+    const map: Record<string, string> = {
+      '巴黎': '#FFE29F', '东京': '#FF8A5B', '纽约': '#764BA2', '伦敦': '#Fed6E3',
+      '北京': '#FDA085', '上海': '#667EEA', '成都': '#38EF7D', '西安': '#FBC2EB', '黄山': '#F5576C',
     };
-    const dist = distances[this.city.name] || Math.floor(Math.random() * 5000 + 500);
-    return dist.toLocaleString();
+    return map[this.city.name] || '#764BA2';
   }
 
-  formatCount(count: number): string {
+  private getCityType(): string {
+    const map: Record<string, string> = {
+      '巴黎': '浪漫之都', '东京': '现代都市', '纽约': '国际大都会', '伦敦': '历史名城',
+      '北京': '历史古迹', '上海': '魔幻都市', '成都': '休闲之都', '西安': '千年古都', '黄山': '自然风光',
+    };
+    return map[this.city.name] || '热门城市';
+  }
+
+  private getCityDescription(): string {
+    const map: Record<string, string> = {
+      '巴黎': '浪漫之都，在塞纳河畔感受法式优雅，在卢浮宫邂逅艺术瑰宝。',
+      '东京': '传统与现代的完美融合，体验最前沿的潮流文化与古老的东方韵味。',
+      '纽约': '不夜城的繁华，时代广场的霓虹，在这里追逐属于你的梦想。',
+      '伦敦': '雾都伦敦，皇室风范，感受英伦绅士的优雅与历史的厚重。',
+      '北京': '千年古都的壮丽与雄浑，长城内外尽显中华文明的恢弘气势。',
+      '上海': '东西方文化的交汇点，魔都的现代与复古在这里完美融合。',
+      '成都': '天府之国，慢生活的代名词，品尝美食，看熊猫卖萌。',
+      '西安': '十三朝古都，穿越千年的历史记忆，触摸文明的脉搏。',
+      '黄山': '五岳归来不看山，黄山归来不看岳。云海奇松，美不胜收。',
+    };
+    return map[this.city.name] || this.city.description || '探索这座城市的独特魅力。';
+  }
+
+  private formatDistance(): string {
+    const map: Record<string, number> = {
+      '巴黎': 8942, '东京': 1876, '纽约': 11234, '伦敦': 8123,
+      '北京': 1240, '上海': 1120, '成都': 1580, '西安': 1380, '黄山': 680,
+    };
+    const dist = map[this.city.name] || Math.floor(Math.random() * 5000 + 500);
+    if (dist >= 10000) {
+      return `${(dist / 10000).toFixed(1)}万km`;
+    }
+    return `${dist.toLocaleString()}km`;
+  }
+
+  private formatCount(count: number): string {
     if (count >= 10000) {
       return (count / 10000).toFixed(1) + 'w';
     } else if (count >= 1000) {
