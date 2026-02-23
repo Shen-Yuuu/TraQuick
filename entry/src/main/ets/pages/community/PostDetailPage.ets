@@ -3,10 +3,11 @@
  * 支持：查看所有评论、点赞回复评论、点击头像跳转用户主页、过渡动画
  */
 
-import { Colors, FontSizes, Spacing, Radius } from '../../utils/Constants';
-import { Post, PostComment } from '../../models/Post';
-import { mockPosts, getMockComments } from '../../services/MockData';
 import { router } from '@kit.ArkUI';
+import { ApiService, ApiPost, CommentListData, ApiComment, CreateCommentParams,
+  CollectResult,
+  LikeResult} from '../../services/ApiService';
+import { Post, PostComment, PostAuthor, PostLocation, CommentReply } from '../../models/Post';
 
 @Entry
 @Component
@@ -20,6 +21,11 @@ struct PostDetailPage {
   @State showSharePanel: boolean = false;
   @State pageEnterAnim: number = 0;
   @State commentAreaAnim: number = 0;
+  @State likeCount: number = 0;
+  @State collectCount: number = 0;
+  @State commentCount: number = 0;
+  @State shareCount: number = 0;
+  @State hasChanged: boolean = false; // 标记是否有数据变更
   private postId: string = '';
 
   aboutToAppear(): void {
@@ -38,17 +44,67 @@ struct PostDetailPage {
     }, 200);
   }
 
-  private loadPostDetail(): void {
-    const found = mockPosts.find(p => p.id === this.postId);
-    if (found) {
-      this.post = found;
-      this.isLiked = found.isLiked || false;
-      this.isCollected = found.isCollected || false;
-      this.comments = getMockComments(this.postId);
+  private async loadPostDetail(): Promise<void> {
+    try {
+      const apiPost: ApiPost = await ApiService.getPostDetail(this.postId);
+
+      this.post = this.convertApiPost(apiPost);
+      this.isLiked = apiPost.isLiked;
+      this.isCollected = apiPost.isCollected;
+      this.likeCount = apiPost.likeCount;
+      this.collectCount = apiPost.collectCount;
+      this.commentCount = apiPost.commentCount;
+      this.shareCount = apiPost.shareCount;
+
+      await this.loadComments();
+
+    } catch (error) {
+      const err = error as Error;
+      console.error('[PostDetail] 加载失败:', err.message);
+    }
+  }
+
+  private async loadComments(): Promise<void> {
+    try {
+      const result: CommentListData = await ApiService.getComments(this.postId, 1, 50);
+
+      // 将两级结构展开为平铺列表
+      const flatComments: PostComment[] = [];
+
+      for (const apiComment of result.items) {
+        // 添加顶级评论
+        flatComments.push(this.convertApiComment(apiComment));
+
+        // 展开子评论
+        if (apiComment.children && apiComment.children.length > 0) {
+          for (const child of apiComment.children) {
+            flatComments.push(this.convertApiComment(child));
+          }
+        }
+      }
+
+      this.comments = flatComments;
+
+    } catch (error) {
+      const err = error as Error;
+      console.error('[PostDetail] 加载评论失败:', err.message);
     }
   }
 
   private goBack(): void {
+    // 如果有变更，将变更后的数据写入 AppStorage，供列表页局部更新
+    if (this.hasChanged && this.post) {
+      const updatedInfo: string = JSON.stringify({
+        postId: this.postId,
+        isLiked: this.isLiked,
+        isCollected: this.isCollected,
+        likeCount: this.likeCount,
+        collectCount: this.collectCount,
+        commentCount: this.commentCount,
+        shareCount: this.shareCount,
+      });
+      AppStorage.setOrCreate('communityPostUpdate', updatedInfo);
+    }
     router.back();
   }
 
@@ -67,31 +123,95 @@ struct PostDetailPage {
     }).catch(() => {});
   }
 
-  private sendComment(): void {
-    if (!this.commentText.trim()) return;
-    const newComment: PostComment = {
-      id: `comment_${Date.now()}`,
-      postId: this.postId,
-      userId: 'user_001',
-      userNickname: '探险家小七',
-      userAvatar: '',
-      content: this.commentText,
-      likeCount: 0,
-      isLiked: false,
-      replyTo: this.replyTo ? { id: this.replyTo.id, authorName: this.replyTo.userNickname } : undefined,
-      createdAt: new Date().toISOString(),
-    };
-    this.comments = [newComment, ...this.comments];
-    this.commentText = '';
-    this.replyTo = null;
+  private async sendComment(): Promise<void> {
+    if (!this.commentText.trim()) {
+      return;
+    }
+
+    const params = new CreateCommentParams();
+    params.postId = this.postId;
+    params.content = this.commentText.trim();
+
+    if (this.replyTo !== null) {
+      params.parentId = this.replyTo.id;
+      params.replyToUserId = this.replyTo.userId;
+    }
+
+    try {
+      await ApiService.createComment(params);
+      this.commentText = '';
+      this.replyTo = null;
+      this.commentCount += 1;
+      this.hasChanged = true;
+
+      await this.loadComments();
+
+    } catch (error) {
+      const err = error as Error;
+      console.error('[PostDetail] 发送评论失败:', err.message);
+    }
   }
 
-  private togglePostLike(): void {
-    this.isLiked = !this.isLiked;
+  private async togglePostLike(): Promise<void> {
+    if (!this.post) return;
+
+    const wasLiked = this.isLiked;
+    const originalCount = this.likeCount;
+
+    // 1. 乐观更新 UI（立即变红/变白）
+    this.isLiked = !wasLiked;
+    this.likeCount = Math.max(0, originalCount + (this.isLiked ? 1 : -1));
+    this.hasChanged = true;
+
+    try {
+      let result: LikeResult;
+      if (wasLiked) {
+        result = await ApiService.unlikePost(this.post.id);
+      } else {
+        result = await ApiService.likePost(this.post.id);
+      }
+
+      // 2. API 成功后，用真实数据校准
+      this.likeCount = result.likeCount;
+
+    } catch (error) {
+      // 3. 失败回滚
+      this.isLiked = wasLiked;
+      this.likeCount = originalCount;
+      const err = error as Error;
+      console.error('[PostDetail] 点赞失败:', err.message);
+    }
   }
 
-  private togglePostCollect(): void {
-    this.isCollected = !this.isCollected;
+  private async togglePostCollect(): Promise<void> {
+    if (!this.post) return;
+
+    const wasCollected = this.isCollected;
+    const originalCount = this.collectCount;
+
+    // 1. 乐观更新
+    this.isCollected = !wasCollected;
+    this.collectCount = Math.max(0, originalCount + (this.isCollected ? 1 : -1));
+    this.hasChanged = true;
+
+    try {
+      let result: CollectResult;
+      if (wasCollected) {
+        result = await ApiService.uncollectPost(this.post.id);
+      } else {
+        result = await ApiService.collectPost(this.post.id);
+      }
+
+      // 2. 校准
+      this.collectCount = result.collectCount;
+
+    } catch (error) {
+      // 3. 回滚
+      this.isCollected = wasCollected;
+      this.collectCount = originalCount;
+      const err = error as Error;
+      console.error('[PostDetail] 收藏失败:', err.message);
+    }
   }
 
   private toggleCommentLike(commentId: string): void {
@@ -101,10 +221,15 @@ struct PostDetailPage {
       const updated: PostComment = {
         id: c.id, postId: c.postId, userId: c.userId,
         userNickname: c.userNickname, userAvatar: c.userAvatar,
-        content: c.content, likeCount: c.likeCount + (c.isLiked ? -1 : 1),
+        content: c.content, likeCount: Math.max(0, c.likeCount + (c.isLiked ? -1 : 1)),
         isLiked: !c.isLiked, replyTo: c.replyTo, createdAt: c.createdAt,
       };
-      this.comments[idx] = updated;
+      // 替换整个数组触发 @State 响应式刷新
+      const newArr: PostComment[] = [];
+      for (let i = 0; i < this.comments.length; i++) {
+        newArr.push(i === idx ? updated : this.comments[i]);
+      }
+      this.comments = newArr;
     }
   }
 
@@ -344,30 +469,61 @@ struct PostDetailPage {
   @Builder
   InteractionBar() {
     Row() {
-      this.InteractionItem('❤️', this.formatCount(this.post!.likeCount), this.isLiked, () => this.togglePostLike())
-      this.InteractionItem('💬', this.formatCount(this.post!.commentCount), false, () => {})
-      this.InteractionItem('⭐', this.formatCount(this.post!.collectCount), this.isCollected, () => this.togglePostCollect())
-      this.InteractionItem('↗️', this.formatCount(this.post!.shareCount), false, () => {})
+      // 点赞 — 直接引用 @State 保证响应式
+      Column() {
+        Text(this.isLiked ? '❤️' : '🤍')
+          .fontSize(22)
+        Text(this.formatCount(this.likeCount))
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.isLiked ? '#EF4444' : '#64748B')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Center)
+      .onClick(() => this.togglePostLike())
+
+      // 评论
+      Column() {
+        Text('💬')
+          .fontSize(22)
+          .opacity(0.6)
+        Text(this.formatCount(this.commentCount))
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#64748B')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Center)
+
+      // 收藏 — 直接引用 @State
+      Column() {
+        Text(this.isCollected ? '⭐' : '☆')
+          .fontSize(22)
+        Text(this.formatCount(this.collectCount))
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.isCollected ? '#F59E0B' : '#64748B')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Center)
+      .onClick(() => this.togglePostCollect())
+
+      // 转发
+      Column() {
+        Text('↗️')
+          .fontSize(22)
+          .opacity(0.6)
+        Text(this.formatCount(this.shareCount))
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#64748B')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Center)
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
     .justifyContent(FlexAlign.SpaceAround)
-  }
-
-  @Builder
-  InteractionItem(icon: string, count: string, active: boolean, onClick: () => void) {
-    Column() {
-      Text(icon)
-        .fontSize(22)
-        .opacity(active ? 1 : 0.6)
-      Text(count)
-        .fontSize(12)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(active ? '#38BDF8' : '#64748B')
-        .margin({ top: 2 })
-    }
-    .alignItems(HorizontalAlign.Center)
-    .onClick(onClick)
   }
 
   @Builder
@@ -398,7 +554,7 @@ struct PostDetailPage {
 
       ForEach(this.comments, (comment: PostComment, index: number) => {
         this.CommentItemView(comment, index)
-      })
+      }, (comment: PostComment) => `${comment.id}_${comment.isLiked}_${comment.likeCount}`)
 
       if (this.comments.length === 0) {
         Column() {
@@ -671,4 +827,86 @@ struct PostDetailPage {
     const colors = ['#0EA5E9', '#06B6D4', '#38BDF8', '#0284C7'];
     return colors[index % colors.length];
   }
+
+  /**
+   * 将 ApiComment 转换为 PostComment
+   */
+  private convertApiComment(apiComment: ApiComment): PostComment {
+    const comment: PostComment = {
+      id: apiComment.id,
+      postId: this.postId,
+      userId: apiComment.user.id,
+      userNickname: apiComment.user.nickname,
+      userAvatar: apiComment.user.avatar,
+      content: apiComment.content,
+      likeCount: apiComment.likeCount,
+      isLiked: false,
+      createdAt: apiComment.createdAt,
+    };
+
+    // 处理回复信息
+    if (apiComment.replyToUser !== null) {
+      const reply: CommentReply = {
+        id: apiComment.replyToUser.id,
+        authorName: apiComment.replyToUser.nickname,
+      };
+      comment.replyTo = reply;
+    }
+
+    return comment;
+  }
+
+  /**
+   * 将 ApiPost 转换为 Post
+   */
+  private convertApiPost(apiPost: ApiPost): Post {
+    const author: PostAuthor = {
+      id: apiPost.author.id,
+      nickname: apiPost.author.nickname,
+      avatar: apiPost.author.avatar,
+      level: apiPost.author.level,
+      levelTitle: apiPost.author.levelTitle,
+    };
+
+    const post: Post = {
+      id: apiPost.id,
+      author: author,
+      content: apiPost.content,
+      images: apiPost.images,
+      tags: apiPost.tags,
+      likeCount: apiPost.likeCount,
+      commentCount: apiPost.commentCount,
+      shareCount: apiPost.shareCount,
+      collectCount: apiPost.collectCount,
+      isLiked: apiPost.isLiked,
+      isCollected: apiPost.isCollected,
+      createdAt: apiPost.createdAt,
+      type: apiPost.type as 'image' | 'video',
+    };
+
+    // 处理可选字段
+    if (apiPost.video) {
+      post.video = apiPost.video;
+    }
+
+    if (apiPost.city !== null) {
+      const location: PostLocation = {
+        cityId: apiPost.city.id,
+        cityName: apiPost.city.name,
+      };
+      if (apiPost.address) {
+        location.address = apiPost.address;
+      }
+      if (apiPost.latitude) {
+        location.latitude = apiPost.latitude;
+      }
+      if (apiPost.longitude) {
+        location.longitude = apiPost.longitude;
+      }
+      post.location = location;
+    }
+
+    return post;
+  }
+
 }

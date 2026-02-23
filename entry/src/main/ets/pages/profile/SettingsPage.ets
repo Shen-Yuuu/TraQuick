@@ -1,23 +1,22 @@
 ﻿/**
- * 设置页面 - 符合设计数
+ * 设置页面 - iOS 风格分组列表
+ * 功能：账号安全、通用设置、关于、退出登录
  */
 
-import { Colors, FontSizes, Spacing, Radius, Sizes } from '../../utils/Constants';
 import { router } from '@kit.ArkUI';
 
 @Entry
 @Component
 struct SettingsPage {
-  @State fogDensity: number = 65;
-  @State renderQuality: number = 2; // 0: 低耗能, 1: 平衡, 2: 高画质
-  @State cacheSize: string = '256 MB';
+  @State darkMode: boolean = false;
+  @State language: string = '简体中文';
 
   build() {
     Column() {
-      // 顶部导航
+      // ====== 顶部导航 ======
       Row() {
         Column() {
-            Text('←')
+          Text('←')
             .fontSize(28)
             .fontColor('#38BDF8')
         }
@@ -41,240 +40,270 @@ struct SettingsPage {
       .padding({ left: 16, right: 16, top: 52, bottom: 16 })
       .backgroundColor('#FFFFFF')
 
-      // 设置列表
+      // ====== 设置列表 ======
       Scroll() {
         Column() {
-          // 账号设置分组
-          Column() {
-              this.SettingItemRow('🔐', '账号与安全', '', true)
-            Divider().color('#F1F5F9').margin({ left: 56 })
-            this.SettingItemRow('🔒', '隐私设置', '', true)
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-          .backgroundColor('#FFFFFF')
-          .borderRadius(16)
-          .margin({ bottom: 24 })
 
-          // 应用偏好分组
-          Text('应用偏好')
+          // ==========================================
+          // 分组一：账号安全
+          // ==========================================
+          Text('账号安全')
             .fontSize(13)
             .fontColor('#94A3B8')
             .width('100%')
-            .margin({ bottom: 12, left: 4 })
+            .margin({ bottom: 8, left: 4 })
 
           Column() {
-            this.SettingItemRow('🔔', '通知设置', '', true)
+            this.SettingCell('🔑', '修改密码', '', () => {
+              console.info('[Settings] 修改密码');
+            })
 
-            Divider().color('#F1F5F9').margin({ left: 56 })
+            this.CellDivider()
 
-            // 地球引擎设置
-            Column() {
-              Row() {
-                Column() {
-                  Text('🌍')
-                    .fontSize(20)
-                }
-                .width(40)
-                .height(40)
-                .backgroundColor('#E0F2FE')
-                .borderRadius(20)
-                .justifyContent(FlexAlign.Center)
-
-                Column() {
-                  Text('地球引擎设置')
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor('#1E293B')
-                  Text('Earth Engine v2.1')
-                    .fontSize(12)
-                    .fontColor('#94A3B8')
-                    .margin({ top: 2 })
-                }
-                .alignItems(HorizontalAlign.Start)
-                .margin({ left: 12 })
-              }
-              .width('100%')
-              .margin({ bottom: 20 })
-
-              // 迷雾密度滑块
-              Column() {
-                Row() {
-                  Text('迷雾密度')
-                    .fontSize(14)
-                    .fontColor('#64748B')
-                  Blank()
-                  Text(`${this.fogDensity}%`)
-                    .fontSize(14)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor('#38BDF8')
-                }
-                .width('100%')
-                .margin({ bottom: 12 })
-
-                Slider({
-                  value: this.fogDensity,
-                  min: 0,
-                  max: 100,
-                  step: 1,
-                  style: SliderStyle.OutSet
-                })
-                  .width('100%')
-                  .blockColor('#FFFFFF')
-                  .trackColor('#E2E8F0')
-                  .selectedColor('#38BDF8')
-                  .showSteps(false)
-                  .showTips(false)
-                  .onChange((value: number) => {
-                    this.fogDensity = Math.round(value);
-                  })
-              }
-              .width('100%')
-              .margin({ bottom: 20 })
-
-              // 渲染质量
-              Column() {
-                Text('渲染质量')
-                  .fontSize(14)
-                  .fontColor('#64748B')
-                  .width('100%')
-                  .margin({ bottom: 12 })
-
-                Row() {
-                    ForEach(['低耗能', '平衡', '高画质'], (item: string, index: number) => {
-                    Text(item)
-                      .fontSize(13)
-                      .fontWeight(this.renderQuality === index ? FontWeight.Bold : FontWeight.Normal)
-                      .fontColor(this.renderQuality === index ? '#38BDF8' : '#64748B')
-                      .padding({ left: 20, right: 20, top: 10, bottom: 10 })
-                      .backgroundColor(this.renderQuality === index ? '#E0F2FE' : '#F8FAFC')
-                      .borderRadius(8)
-                      .border({
-                        width: this.renderQuality === index ? 1 : 0,
-                        color: '#BAE6FD'
-                      })
-                      .layoutWeight(1)
-                      .textAlign(TextAlign.Center)
-                      .margin({ right: index < 2 ? 8 : 0 })
-                      .onClick(() => {
-                        this.renderQuality = index;
-                      })
-                  })
-                }
-                .width('100%')
-              }
-            }
-            .width('100%')
-            .padding(16)
+            this.SettingCell('📱', '绑定手机', '已绑定', () => {
+              console.info('[Settings] 绑定手机');
+            })
           }
           .width('100%')
-          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
           .backgroundColor('#FFFFFF')
-          .borderRadius(16)
-          .margin({ bottom: 24 })
+          .borderRadius(12)
+          .margin({ bottom: 28 })
 
-          // 系统分组
-          Text('系统')
+          // ==========================================
+          // 分组二：通用设置
+          // ==========================================
+          Text('通用设置')
             .fontSize(13)
             .fontColor('#94A3B8')
             .width('100%')
-            .margin({ bottom: 12, left: 4 })
+            .margin({ bottom: 8, left: 4 })
 
           Column() {
-              this.SettingItemRow('🗑️', '清除缓存', this.cacheSize, true)
-            Divider().color('#F1F5F9').margin({ left: 56 })
-            this.SettingItemRow('ℹ️', '关于 TraQuick', '', true)
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-          .backgroundColor('#FFFFFF')
-          .borderRadius(16)
-          .margin({ bottom: 32 })
-
-          // 退出登录按钮
-          Button() {
+            // 深色模式 - 带 Toggle
             Row() {
-                Text('⇦')
-                .fontSize(18)
-                .fontColor('#EF4444')
-                Text('退出登录')
-                .fontSize(15)
-                .fontColor('#EF4444')
-                .margin({ left: 8 })
+              Column() {
+                Text('🌙')
+                  .fontSize(18)
+              }
+              .width(36)
+              .height(36)
+              .backgroundColor('#E0F2FE')
+              .borderRadius(10)
+              .justifyContent(FlexAlign.Center)
+
+              Text('深色模式')
+                .fontSize(16)
+                .fontColor('#1E293B')
+                .margin({ left: 14 })
+                .layoutWeight(1)
+
+              Toggle({ type: ToggleType.Switch, isOn: this.darkMode })
+                .selectedColor('#38BDF8')
+                .switchPointColor('#FFFFFF')
+                .onChange((isOn: boolean) => {
+                  this.darkMode = isOn;
+                  console.info(`[Settings] 深色模式: ${isOn}`);
+                })
             }
+            .width('100%')
+            .height(56)
+            .padding({ left: 16, right: 16 })
+
+            this.CellDivider()
+
+            this.SettingCell('🌐', '语言', this.language, () => {
+              console.info('[Settings] 语言设置');
+            })
+          }
+          .width('100%')
+          .backgroundColor('#FFFFFF')
+          .borderRadius(12)
+          .margin({ bottom: 28 })
+
+          // ==========================================
+          // 分组三：关于
+          // ==========================================
+          Text('关于')
+            .fontSize(13)
+            .fontColor('#94A3B8')
+            .width('100%')
+            .margin({ bottom: 8, left: 4 })
+
+          Column() {
+            this.SettingCell('🔏', '隐私政策', '', () => {
+              console.info('[Settings] 隐私政策');
+            })
+
+            this.CellDivider()
+
+            this.SettingCell('📋', '用户协议', '', () => {
+              console.info('[Settings] 用户协议');
+            })
+
+            this.CellDivider()
+
+            // 版本号 - 无箭头，不可点击
+            Row() {
+              Column() {
+                Text('ℹ️')
+                  .fontSize(18)
+              }
+              .width(36)
+              .height(36)
+              .backgroundColor('#E0F2FE')
+              .borderRadius(10)
+              .justifyContent(FlexAlign.Center)
+
+              Text('版本号')
+                .fontSize(16)
+                .fontColor('#1E293B')
+                .margin({ left: 14 })
+                .layoutWeight(1)
+
+              Text('v1.0.0')
+                .fontSize(14)
+                .fontColor('#94A3B8')
+            }
+            .width('100%')
+            .height(56)
+            .padding({ left: 16, right: 16 })
+          }
+          .width('100%')
+          .backgroundColor('#FFFFFF')
+          .borderRadius(12)
+          .margin({ bottom: 40 })
+
+          // ==========================================
+          // 退出登录
+          // ==========================================
+          Column() {
+            Text('退出登录')
+              .fontSize(16)
+              .fontColor('#EF4444')
+              .fontWeight(FontWeight.Medium)
           }
           .width('100%')
           .height(52)
           .backgroundColor('#FFFFFF')
-          .border({ width: 1, color: '#FEE2E2' })
-          .borderRadius(26)
-          .margin({ bottom: 24 })
+          .borderRadius(12)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
           .onClick(() => {
-            this.handleLogout();
+            this.showLogoutConfirm();
           })
 
-          // 版本信息
-          Column() {
-            Text('🌍')
-              .fontSize(24)
-              .opacity(0.5)
-            Text('TRAQUICK IOS V2.4.1')
-              .fontSize(11)
-              .fontColor('#CBD5E1')
-              .letterSpacing(1)
-              .margin({ top: 8 })
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Center)
-          .margin({ bottom: 48 })
+          // 底部留白
+          Column().height(60)
         }
-        .padding({ left: Spacing.pagePadding, right: Spacing.pagePadding, top: 16 })
+        .padding({ left: 16, right: 16, top: 16 })
       }
       .layoutWeight(1)
       .scrollBar(BarState.Off)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F8FAFC')
+    .backgroundColor('#F2F3F5')
   }
 
+  // ============================
+  // 通用设置项（带箭头，可点击）
+  // ============================
   @Builder
-  SettingItemRow(icon: string, title: string, value: string, showArrow: boolean) {
+  SettingCell(icon: string, title: string, value: string, onTap: () => void) {
     Row() {
       Column() {
         Text(icon)
-          .fontSize(20)
+          .fontSize(18)
       }
-      .width(40)
-      .height(40)
+      .width(36)
+      .height(36)
       .backgroundColor('#E0F2FE')
-      .borderRadius(20)
+      .borderRadius(10)
       .justifyContent(FlexAlign.Center)
 
       Text(title)
-        .fontSize(15)
+        .fontSize(16)
         .fontColor('#1E293B')
-        .margin({ left: 12 })
+        .margin({ left: 14 })
         .layoutWeight(1)
 
-      if (value) {
+      if (value.length > 0) {
         Text(value)
-          .fontSize(13)
+          .fontSize(14)
           .fontColor('#94A3B8')
-          .margin({ right: 8 })
+          .margin({ right: 6 })
       }
 
-      if (showArrow) {
-          Text('›')
-          .fontSize(20)
-          .fontColor('#CBD5E1')
-      }
+      Text('›')
+        .fontSize(20)
+        .fontColor('#CBD5E1')
     }
     .width('100%')
     .height(56)
+    .padding({ left: 16, right: 16 })
+    .onClick(onTap)
   }
 
-  handleLogout() {
-    router.replaceUrl({ url: 'pages/auth/LoginPage' });
+  // ============================
+  // 分割线
+  // ============================
+  @Builder
+  CellDivider() {
+    Row() {
+      Column().width(66) // 图标宽36 + 左padding16 + 间距14
+      Divider()
+        .color('#F1F5F9')
+        .layoutWeight(1)
+    }
+    .width('100%')
+  }
+
+  // ============================
+  // 退出登录确认弹窗（系统 AlertDialog）
+  // ============================
+  private showLogoutConfirm(): void {
+    AlertDialog.show({
+      title: '退出登录',
+      message: '确定要退出当前账号吗？退出后需要重新登录。',
+      alignment: DialogAlignment.Center,
+      primaryButton: {
+        value: '取消',
+        fontColor: '#64748B',
+        action: () => {
+          console.info('[Settings] 取消退出');
+        }
+      },
+      secondaryButton: {
+        value: '退出',
+        fontColor: '#EF4444',
+        action: () => {
+          this.handleLogout();
+        }
+      }
+    });
+  }
+
+  // ============================
+  // 执行退出登录
+  // ============================
+  private handleLogout(): void {
+    // 1. 清除本地登录状态（模拟）
+    try {
+      AppStorage.delete('currentUserId');
+      AppStorage.delete('isLoggedIn');
+      AppStorage.delete('userToken');
+      AppStorage.delete('userNickname');
+    } catch (e) {
+      console.error(`[Settings] 清除存储异常: ${e}`);
+    }
+
+    console.info('[Settings] 已退出登录，跳转登录页');
+
+    // 2. 跳转登录页（replaceUrl 阻止回退）
+    router.replaceUrl({
+      url: 'pages/auth/LoginPage'
+    }).catch((err: Error) => {
+      console.error(`[Settings] 跳转失败: ${err.message}`);
+    });
   }
 }

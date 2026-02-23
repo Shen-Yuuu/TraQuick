@@ -1,7 +1,9 @@
 ﻿/**
- * 登录页面 - 符合设计数 */
-import { Colors, FontSizes, Spacing, Radius, Sizes } from '../../utils/Constants';
+ * 登录页面 - 对接真实 API
+ */
 import { router } from '@kit.ArkUI';
+import { ApiService, AuthData, LoginParams } from '../../services/ApiService';
+import { promptAction } from '@kit.ArkUI';
 
 @Entry
 @Component
@@ -10,6 +12,7 @@ struct LoginPage {
   @State password: string = '';
   @State isPasswordVisible: boolean = false;
   @State isLoading: boolean = false;
+  @State errorMessage: string = '';
 
   build() {
     Column() {
@@ -25,32 +28,27 @@ struct LoginPage {
 
       // 主内容
       Column() {
-        // Logo区域
+        // Logo 区域
         Column() {
-          // 轨道动画Logo
           Stack() {
-            // 外圈轨道
             Column()
               .width(100)
               .height(100)
               .borderRadius(50)
               .border({ width: 2, color: 'rgba(14, 165, 233, 0.2)' })
 
-            // 中圈轨道
             Column()
               .width(80)
               .height(80)
               .borderRadius(40)
               .border({ width: 1.5, color: 'rgba(14, 165, 233, 0.3)' })
 
-            // 内圈填充
             Column()
               .width(60)
               .height(60)
               .borderRadius(30)
               .backgroundColor('rgba(14, 165, 233, 0.1)')
 
-            // 地球图标
             Text('🌐')
               .fontSize(32)
           }
@@ -72,28 +70,47 @@ struct LoginPage {
 
         // 表单区域
         Column() {
-          // 账号输入
+          // 错误提示
+          if (this.errorMessage) {
+            Row() {
+              Text('⚠️')
+                .fontSize(14)
+              Text(this.errorMessage)
+                .fontSize(13)
+                .fontColor('#EF4444')
+                .margin({ left: 6 })
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+            .backgroundColor('#FEF2F2')
+            .borderRadius(10)
+            .margin({ bottom: 16 })
+          }
+
+          // 邮箱输入
           Column() {
-            Text('账号')
+            Text('邮箱')
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
               .fontColor('#64748B')
               .margin({ bottom: 10, left: 4 })
 
             Row() {
-              Text('👤')
+              Text('📧')
                 .fontSize(18)
                 .margin({ right: 12 })
 
-              TextInput({ placeholder: '请输入手机号/邮箱', text: this.account })
+              TextInput({ placeholder: '请输入邮箱', text: this.account })
                 .layoutWeight(1)
                 .backgroundColor('transparent')
                 .fontSize(15)
                 .fontColor('#1E293B')
                 .placeholderColor('#CBD5E1')
                 .caretColor('#38BDF8')
+                .type(InputType.Email)
                 .onChange((value: string) => {
                   this.account = value;
+                  this.errorMessage = '';
                 })
             }
             .width('100%')
@@ -128,6 +145,7 @@ struct LoginPage {
                 .type(this.isPasswordVisible ? InputType.Normal : InputType.Password)
                 .onChange((value: string) => {
                   this.password = value;
+                  this.errorMessage = '';
                 })
 
               Text(this.isPasswordVisible ? '👁️' : '🙈')
@@ -179,10 +197,11 @@ struct LoginPage {
           }
           .width('100%')
           .height(52)
-          .backgroundColor('#38BDF8')
+          .backgroundColor(this.canLogin() ? '#38BDF8' : '#CBD5E1')
           .borderRadius(26)
           .shadow({ radius: 16, color: 'rgba(14, 165, 233, 0.35)', offsetY: 6 })
           .margin({ top: 32 })
+          .enabled(this.canLogin() && !this.isLoading)
           .onClick(() => {
             this.handleLogin();
           })
@@ -192,7 +211,6 @@ struct LoginPage {
 
         // 底部区域
         Column() {
-          // 分割线
           Row() {
             Divider().layoutWeight(1).color('#E2E8F0')
             Text('或者使用以下方式登录')
@@ -204,7 +222,6 @@ struct LoginPage {
           .width('100%')
           .margin({ bottom: 28 })
 
-          // 第三方登录
           Row() {
             this.ThirdPartyIcon('💬')
             this.ThirdPartyIcon('👁️')
@@ -213,7 +230,6 @@ struct LoginPage {
           .justifyContent(FlexAlign.Center)
           .margin({ bottom: 36 })
 
-          // 注册入口
           Row() {
             Text('还没有账号？')
               .fontSize(14)
@@ -254,15 +270,46 @@ struct LoginPage {
     .margin({ left: 16, right: 16 })
   }
 
-  handleLogin() {
-    if (!this.account || !this.password) {
+  private canLogin(): boolean {
+    return this.account.trim().length > 0 && this.password.trim().length > 0;
+  }
+
+  /**
+   * 真实登录
+   */
+  private async handleLogin(): Promise<void> {
+    if (!this.canLogin()) {
       return;
     }
 
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
+    this.errorMessage = '';
+
+    try {
+      // 构造参数对象
+      const params = new LoginParams();
+      params.email = this.account;
+      params.password = this.password;
+
+      const result: AuthData = await ApiService.login(params);
+
+      // 存储 Token 和用户信息
+      AppStorage.setOrCreate('userToken', result.accessToken);
+      AppStorage.setOrCreate('currentUserId', result.user.id);
+      AppStorage.setOrCreate('currentUserNickname', result.user.nickname);
+      AppStorage.setOrCreate('currentUserAvatar', result.user.avatar);
+      AppStorage.setOrCreate('currentUserEmail', result.user.email);
+      AppStorage.setOrCreate('isLoggedIn', true);
+
+      console.info(`[Login] 登录成功: ${result.user.nickname}`);
       router.replaceUrl({ url: 'pages/Index' });
-    }, 1500);
+
+    } catch (error) {
+      const err = error as Error;
+      this.errorMessage = err.message || '登录失败，请检查邮箱和密码';
+      console.error(`[Login] 登录失败: ${err.message}`);
+    } finally {
+      this.isLoading = false;
+    }
   }
 }

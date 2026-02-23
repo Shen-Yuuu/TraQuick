@@ -1,294 +1,208 @@
 /**
- * 注册页面
+ * 注册页面 - 对接真实 API
  */
-
-import { Colors, FontSizes, Spacing, Radius, Sizes } from '../../utils/Constants';
 import { router } from '@kit.ArkUI';
+import { ApiService, AuthData, RegisterParams } from '../../services/ApiService';
 
 @Entry
 @Component
 struct RegisterPage {
+  @State email: string = '';
   @State nickname: string = '';
-  @State account: string = '';
   @State password: string = '';
   @State confirmPassword: string = '';
-  @State verifyCode: string = '';
   @State isPasswordVisible: boolean = false;
-  @State countdown: number = 0;
   @State isLoading: boolean = false;
-  @State agreeTerms: boolean = false;
+  @State errorMessage: string = '';
 
   build() {
     Column() {
-      // 背景装饰
       Column()
         .width('100%')
-        .height('25%')
+        .height('30%')
         .linearGradient({
           direction: GradientDirection.Bottom,
-          colors: [['#E0F2FE', 0], ['#FFFFFF', 1]]
+          colors: [['#E0F2FE', 0], ['#F0F9FF', 0.5], ['#FFFFFF', 1]]
         })
         .position({ x: 0, y: 0 })
 
-      // 顶部导航
-      Row() {
-        Text('←')
-          .fontSize(24)
-          .fontColor(Colors.textPrimary)
-          .onClick(() => {
-            router.back();
-          })
-
-        Text('注册')
-          .fontSize(FontSizes.h4)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Colors.textPrimary)
-
-        // 占位保持居中
-        Text('')
-          .width(24)
-      }
-      .width('100%')
-      .padding({ left: Spacing.pagePadding, right: Spacing.pagePadding, top: 56, bottom: 20 })
-
-      // 表单区域
-      Scroll() {
-        Column() {
-          // Logo
-          Column() {
-            Text('🌍')
-              .fontSize(48)
-            Text('加入 TraQuick')
-              .fontSize(FontSizes.h4)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Colors.textPrimary)
-              .margin({ top: 12 })
-            Text('开启你的探索之旅')
-              .fontSize(FontSizes.bodySmall)
-              .fontColor(Colors.textTertiary)
-              .margin({ top: 4 })
-          }
-          .margin({ bottom: 32 })
-          .alignItems(HorizontalAlign.Center)
-
-          // 昵称输入
-          this.InputField('昵称', '👤', '请输入昵称', this.nickname, (value: string) => {
-            this.nickname = value;
-          })
-
-          // 账号输入
-          this.InputField('手机/邮箱', '📱', '请输入手机号或邮箱', this.account, (value: string) => {
-            this.account = value;
-          })
-
-          // 验证码输入
-          Column() {
-            Text('验证码')
-              .fontSize(FontSizes.bodySmall)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Colors.textSecondary)
-              .margin({ bottom: 8, left: 4 })
-
-            Row() {
-              Text('✉️')
-                .fontSize(18)
-                .margin({ right: 12 })
-
-              TextInput({ placeholder: '请输入验证码', text: this.verifyCode })
-                .layoutWeight(1)
-                .backgroundColor('transparent')
-                .fontSize(FontSizes.body)
-                .fontColor(Colors.textPrimary)
-                .placeholderColor(Colors.textQuaternary)
-                .caretColor(Colors.primary)
-                .onChange((value: string) => {
-                  this.verifyCode = value;
-                })
-
-              Button(this.countdown > 0 ? `${this.countdown}s` : '获取验证码')
-                .fontSize(FontSizes.small)
-                .fontColor(this.countdown > 0 ? Colors.textQuaternary : Colors.primary)
-                .backgroundColor('transparent')
-                .enabled(this.countdown === 0)
-                .onClick(() => {
-                  this.sendVerifyCode();
-                })
-            }
-            .width('100%')
-            .height(Sizes.inputHeight)
-            .padding({ left: 16, right: 16 })
-            .backgroundColor(Colors.bgSecondary)
-            .borderRadius(Radius.input)
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .margin({ bottom: 16 })
-
-          // 密码输入
-          Column() {
-            Text('密码')
-              .fontSize(FontSizes.bodySmall)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Colors.textSecondary)
-              .margin({ bottom: 8, left: 4 })
-
-            Row() {
-              Text('🔒')
-                .fontSize(18)
-                .margin({ right: 12 })
-
-              TextInput({ placeholder: '请设置8-20位密码', text: this.password })
-                .layoutWeight(1)
-                .backgroundColor('transparent')
-                .fontSize(FontSizes.body)
-                .fontColor(Colors.textPrimary)
-                .placeholderColor(Colors.textQuaternary)
-                .caretColor(Colors.primary)
-                .type(this.isPasswordVisible ? InputType.Normal : InputType.Password)
-                .onChange((value: string) => {
-                  this.password = value;
-                })
-
-              Text(this.isPasswordVisible ? '👁️' : '🙈')
-                .fontSize(18)
-                .onClick(() => {
-                  this.isPasswordVisible = !this.isPasswordVisible;
-                })
-            }
-            .width('100%')
-            .height(Sizes.inputHeight)
-            .padding({ left: 16, right: 16 })
-            .backgroundColor(Colors.bgSecondary)
-            .borderRadius(Radius.input)
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .margin({ bottom: 16 })
-
-          // 确认密码
-          Column() {
-            Text('确认密码')
-              .fontSize(FontSizes.bodySmall)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Colors.textSecondary)
-              .margin({ bottom: 8, left: 4 })
-
-            Row() {
-              Text('🔒')
-                .fontSize(18)
-                .margin({ right: 12 })
-
-              TextInput({ placeholder: '请再次输入密码', text: this.confirmPassword })
-                .layoutWeight(1)
-                .backgroundColor('transparent')
-                .fontSize(FontSizes.body)
-                .fontColor(Colors.textPrimary)
-                .placeholderColor(Colors.textQuaternary)
-                .caretColor(Colors.primary)
-                .type(InputType.Password)
-                .onChange((value: string) => {
-                  this.confirmPassword = value;
-                })
-            }
-            .width('100%')
-            .height(Sizes.inputHeight)
-            .padding({ left: 16, right: 16 })
-            .backgroundColor(Colors.bgSecondary)
-            .borderRadius(Radius.input)
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .margin({ bottom: 24 })
-
-          // 用户协议
-          Row() {
-            Checkbox()
-              .select(this.agreeTerms)
-              .selectedColor(Colors.primary)
-              .onChange((value: boolean) => {
-                this.agreeTerms = value;
-              })
-
-            Text() {
-              Span('我已阅读并同意')
-                .fontSize(FontSizes.small)
-                .fontColor(Colors.textTertiary)
-              Span('《用户协议》')
-                .fontSize(FontSizes.small)
-                .fontColor(Colors.primary)
-              Span('和')
-                .fontSize(FontSizes.small)
-                .fontColor(Colors.textTertiary)
-              Span('《隐私政策》')
-                .fontSize(FontSizes.small)
-                .fontColor(Colors.primary)
-            }
-            .margin({ left: 8 })
-          }
-          .width('100%')
-
-          // 注册按钮
-          Button() {
-            Row() {
-              if (this.isLoading) {
-                LoadingProgress()
-                  .width(24)
-                  .height(24)
-                  .color(Colors.textWhite)
-              } else {
-                Text('注册')
-                  .fontSize(FontSizes.bodyLarge)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor(Colors.textWhite)
-              }
-            }
-          }
-          .width('100%')
-          .height(Sizes.buttonLg)
-          .backgroundColor(this.agreeTerms ? Colors.primary : Colors.textQuaternary)
-          .borderRadius(Radius.button)
-          .shadow({ radius: 12, color: 'rgba(14, 165, 233, 0.3)', offsetY: 4 })
-          .margin({ top: 24 })
-          .enabled(this.agreeTerms)
-          .onClick(() => {
-            this.handleRegister();
-          })
-
-          // 登录入口
-          Row() {
-            Text('已有账号？')
-              .fontSize(FontSizes.bodySmall)
-              .fontColor(Colors.textTertiary)
-            Text('立即登录')
-              .fontSize(FontSizes.bodySmall)
-              .fontColor(Colors.primary)
-              .fontWeight(FontWeight.Medium)
-              .margin({ left: 4 })
-              .onClick(() => {
-                router.back();
-              })
-          }
-          .margin({ top: 24, bottom: 48 })
+      Column() {
+        // 顶部导航
+        Row() {
+          Text('←')
+            .fontSize(28)
+            .fontColor('#38BDF8')
+            .onClick(() => {
+              router.back();
+            })
+          Blank()
         }
         .width('100%')
-        .padding({ left: Spacing.pagePadding, right: Spacing.pagePadding })
+        .padding({ left: 16, right: 16, top: 48 })
+
+        // 标题
+        Column() {
+          Text('创建账号')
+            .fontSize(28)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1E293B')
+
+          Text('开始你的探索之旅')
+            .fontSize(14)
+            .fontColor('#94A3B8')
+            .margin({ top: 8 })
+        }
+        .width('100%')
+        .padding({ left: 24 })
+        .alignItems(HorizontalAlign.Start)
+        .margin({ top: 20, bottom: 32 })
+
+        // 表单
+        Scroll() {
+          Column() {
+            // 错误提示
+            if (this.errorMessage) {
+              Row() {
+                Text('⚠️')
+                  .fontSize(14)
+                Text(this.errorMessage)
+                  .fontSize(13)
+                  .fontColor('#EF4444')
+                  .margin({ left: 6 })
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+              .backgroundColor('#FEF2F2')
+              .borderRadius(10)
+              .margin({ bottom: 16 })
+            }
+
+            // 昵称
+            this.InputField('昵称', '👤', '给自己取个名字', this.nickname, InputType.Normal, (v: string) => {
+              this.nickname = v;
+              this.errorMessage = '';
+            })
+
+            // 邮箱
+            this.InputField('邮箱', '📧', '请输入邮箱', this.email, InputType.Email, (v: string) => {
+              this.email = v;
+              this.errorMessage = '';
+            })
+
+            // 密码
+            Column() {
+              Text('密码')
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#64748B')
+                .margin({ bottom: 10, left: 4 })
+
+              Row() {
+                Text('🔒')
+                  .fontSize(18)
+                  .margin({ right: 12 })
+
+                TextInput({ placeholder: '至少6位密码', text: this.password })
+                  .layoutWeight(1)
+                  .backgroundColor('transparent')
+                  .fontSize(15)
+                  .fontColor('#1E293B')
+                  .placeholderColor('#CBD5E1')
+                  .type(this.isPasswordVisible ? InputType.Normal : InputType.Password)
+                  .onChange((v: string) => {
+                    this.password = v;
+                    this.errorMessage = '';
+                  })
+
+                Text(this.isPasswordVisible ? '👁️' : '🙈')
+                  .fontSize(18)
+                  .opacity(0.6)
+                  .onClick(() => {
+                    this.isPasswordVisible = !this.isPasswordVisible;
+                  })
+              }
+              .width('100%')
+              .height(52)
+              .padding({ left: 16, right: 16 })
+              .backgroundColor('#F8FAFC')
+              .borderRadius(14)
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+            .margin({ top: 20 })
+
+            // 确认密码
+            this.InputField('确认密码', '🔒', '再次输入密码', this.confirmPassword, InputType.Password, (v: string) => {
+              this.confirmPassword = v;
+              this.errorMessage = '';
+            })
+
+            // 注册按钮
+            Button() {
+              Row() {
+                if (this.isLoading) {
+                  LoadingProgress()
+                    .width(24)
+                    .height(24)
+                    .color('#FFFFFF')
+                } else {
+                  Text('注册')
+                    .fontSize(16)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor('#FFFFFF')
+                  Text('🚀')
+                    .fontSize(16)
+                    .margin({ left: 8 })
+                }
+              }
+            }
+            .width('100%')
+            .height(52)
+            .backgroundColor(this.canRegister() ? '#38BDF8' : '#CBD5E1')
+            .borderRadius(26)
+            .margin({ top: 32 })
+            .enabled(this.canRegister() && !this.isLoading)
+            .onClick(() => {
+              this.handleRegister();
+            })
+
+            // 已有账号
+            Row() {
+              Text('已有账号？')
+                .fontSize(14)
+                .fontColor('#94A3B8')
+              Text('去登录')
+                .fontSize(14)
+                .fontColor('#38BDF8')
+                .fontWeight(FontWeight.Bold)
+                .margin({ left: 4 })
+                .onClick(() => {
+                  router.back();
+                })
+            }
+            .margin({ top: 24, bottom: 48 })
+          }
+          .padding({ left: 24, right: 24 })
+        }
+        .layoutWeight(1)
+        .scrollBar(BarState.Off)
       }
-      .layoutWeight(1)
-      .scrollBar(BarState.Off)
+      .width('100%')
+      .height('100%')
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Colors.bgPrimary)
+    .backgroundColor('#FFFFFF')
   }
 
   @Builder
-  InputField(label: string, icon: string, placeholder: string, value: string, onChange: (value: string) => void) {
+  InputField(label: string, icon: string, placeholder: string, value: string, type: InputType, onChange: (v: string) => void) {
     Column() {
       Text(label)
-        .fontSize(FontSizes.bodySmall)
+        .fontSize(13)
         .fontWeight(FontWeight.Medium)
-        .fontColor(Colors.textSecondary)
-        .margin({ bottom: 8, left: 4 })
+        .fontColor('#64748B')
+        .margin({ bottom: 10, left: 4 })
 
       Row() {
         Text(icon)
@@ -298,48 +212,71 @@ struct RegisterPage {
         TextInput({ placeholder: placeholder, text: value })
           .layoutWeight(1)
           .backgroundColor('transparent')
-          .fontSize(FontSizes.body)
-          .fontColor(Colors.textPrimary)
-          .placeholderColor(Colors.textQuaternary)
-          .caretColor(Colors.primary)
+          .fontSize(15)
+          .fontColor('#1E293B')
+          .placeholderColor('#CBD5E1')
+          .type(type)
           .onChange(onChange)
       }
       .width('100%')
-      .height(Sizes.inputHeight)
+      .height(52)
       .padding({ left: 16, right: 16 })
-      .backgroundColor(Colors.bgSecondary)
-      .borderRadius(Radius.input)
+      .backgroundColor('#F8FAFC')
+      .borderRadius(14)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    .margin({ bottom: 16 })
+    .margin({ top: 20 })
   }
 
-  sendVerifyCode() {
-    if (!this.account) {
-      return;
-    }
-    this.countdown = 60;
-    const timer = setInterval(() => {
-      this.countdown--;
-      if (this.countdown <= 0) {
-        clearInterval(timer);
-      }
-    }, 1000);
+  private canRegister(): boolean {
+    return this.email.trim().length > 0
+      && this.nickname.trim().length > 0
+      && this.password.length >= 6
+      && this.confirmPassword.length > 0;
   }
 
-  handleRegister() {
-    if (!this.nickname || !this.account || !this.verifyCode || !this.password || !this.confirmPassword) {
-      return;
-    }
+  private async handleRegister(): Promise<void> {
+    // 前端校验
     if (this.password !== this.confirmPassword) {
+      this.errorMessage = '两次密码输入不一致';
+      return;
+    }
+
+    if (this.password.length < 6) {
+      this.errorMessage = '密码至少6位';
       return;
     }
 
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
+    this.errorMessage = '';
+
+    try {
+      const params = new RegisterParams();
+      params.email = this.email;
+      params.password = this.password;
+      params.nickname = this.nickname;
+
+      const result: AuthData = await ApiService.register(params);
+
+      // 注册成功后自动登录
+      AppStorage.setOrCreate('userToken', result.accessToken);
+      AppStorage.setOrCreate('currentUserId', result.user.id);
+      AppStorage.setOrCreate('currentUserNickname', result.user.nickname);
+      AppStorage.setOrCreate('currentUserAvatar', result.user.avatar);
+      AppStorage.setOrCreate('currentUserEmail', result.user.email);
+      AppStorage.setOrCreate('isLoggedIn', true);
+
+      console.info(`[Register] 注册成功: ${result.user.nickname}`);
+
       router.replaceUrl({ url: 'pages/Index' });
-    }, 1500);
+
+    } catch (error) {
+      const err = error as Error;
+      this.errorMessage = err.message || '注册失败，请重试';
+      console.error(`[Register] 注册失败: ${err.message}`);
+    } finally {
+      this.isLoading = false;
+    }
   }
 }

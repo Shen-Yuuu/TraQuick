@@ -1,48 +1,38 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
-import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-
-const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
-    } catch (err) {
-      hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
-    }
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
-  }
+    // 初始化 AppStorage 默认值
+    // PersistentStorage 在 ArkTS 中通过 AppStorage 配合 @StorageProp 使用
+    AppStorage.setOrCreate('userToken', '');
+    AppStorage.setOrCreate('currentUserId', '');
+    AppStorage.setOrCreate('currentUserNickname', '');
+    AppStorage.setOrCreate('currentUserAvatar', '');
+    AppStorage.setOrCreate('currentUserEmail', '');
+    AppStorage.setOrCreate('isLoggedIn', false);
 
-  onDestroy(): void {
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
+    console.info('[EntryAbility] AppStorage 初始化完成');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    // Main window is created, set main page for this ability
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
+    // 根据登录状态决定首页
+    const isLoggedIn = AppStorage.get<boolean>('isLoggedIn') || false;
+    const token = AppStorage.get<string>('userToken') || '';
 
-    windowStage.loadContent('pages/Index', (err) => {
-      if (err.code) {
-        hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
+    let startPage: string;
+    if (isLoggedIn && token) {
+      startPage = 'pages/Index';
+    } else {
+      startPage = 'pages/auth/LoginPage';
+    }
+
+    windowStage.loadContent(startPage, (err) => {
+      if (err) {
+        console.error(`[EntryAbility] 加载页面失败: ${JSON.stringify(err)}`);
         return;
       }
-      hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
+      console.info(`[EntryAbility] 加载页面: ${startPage}`);
     });
-  }
-
-  onWindowStageDestroy(): void {
-    // Main window is destroyed, release UI related resources
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
-  }
-
-  onForeground(): void {
-    // Ability has brought to foreground
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
-  }
-
-  onBackground(): void {
-    // Ability has back to background
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
   }
 }

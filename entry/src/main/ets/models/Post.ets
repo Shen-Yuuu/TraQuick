@@ -50,6 +50,16 @@ export interface PostComment {
   createdAt: string;
 }
 
+export interface PostUpdateInfo {
+  postId: string;
+  isLiked: boolean;
+  isCollected: boolean;
+  likeCount: number;
+  collectCount: number;
+  commentCount: number;
+  shareCount: number;
+}
+
 export interface CommentReply {
   id: string;
   authorName: string;

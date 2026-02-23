@@ -398,3 +398,10 @@ export function getRecommendPosts(page: number = 1, pageSize: number = 10): Post
   }
   return result;
 }
+
+/**
+ * 将新发布的动态插入到列表头部
+ */
+export function addMockPost(newPost: Post): void {
+  mockPosts.unshift(newPost);
+}

@@ -1,65 +1,346 @@
 ﻿/**
- * 社区页面 - 动态广场
- * 优化UI匹配设计原型
+ * 社区页面 - 对接真实 API
  */
 
-import { Colors, FontSizes, Spacing, Radius } from '../../utils/Constants';
-import { PostCard } from '../../components/common/PostCard';
-import { SharePanel } from '../../components/common/SharePanel';
-import { Post, PostComment } from '../../models/Post';
-import { mockPosts, getRecommendPosts } from '../../services/MockData';
 import { router } from '@kit.ArkUI';
+import { SharePanel } from '../../components/common/SharePanel';
+import { Post, PostAuthor, PostLocation, PostUpdateInfo } from '../../models/Post';
+import { ApiService, ApiPost, PaginatedPosts, LikeResult, CollectResult } from '../../services/ApiService';
 
 @Entry
 @Component
 export struct CommunityPage {
-  @State currentMainTab: number = 0;    // 0: 社区, 1: 视频
-  @State currentSubTab: number = 0;     // 0: 推荐, 1: 关注, 2: 朋友
+  @State currentMainTab: number = 1; // 0: 视频, 1: 社区
+  @State currentSubTab: number = 0; // 0: 推荐, 1: 关注, 2: 朋友
   @State postList: Post[] = [];
   @State isRefreshing: boolean = false;
+  @State isLoadingMore: boolean = false;
+  @State currentPage: number = 1;
+  @State totalPages: number = 1;
   @State showSharePanel: boolean = false;
   @State sharePost: Post | null = null;
-  @StorageLink('communityRefreshTrigger') @Watch('onRefreshTriggerChange') refreshTrigger: number = 0;
+  @State errorMessage: string = '';
+  @State showRefreshToast: boolean = false;
+  @State toastMessage: string = '';
+  @StorageLink('communityPostUpdate') @Watch('onPostUpdateChange') postUpdateJson: string = '';
 
   private mainTabs: string[] = ['视频', '社区'];
   private subTabs: string[] = ['推荐', '关注', '朋友'];
 
   aboutToAppear(): void {
-    // 初始化全局刷新触发器
-    if (!AppStorage.has('communityRefreshTrigger')) {
-      AppStorage.setOrCreate('communityRefreshTrigger', 0);
+    // 初始化 AppStorage
+    if (!AppStorage.has('communityPostUpdate')) {
+      AppStorage.setOrCreate('communityPostUpdate', '');
     }
-    this.loadPosts();
-    this.currentMainTab = 1; // 默认选中社区
+    this.loadPosts(true);
   }
 
-  // 监听刷新触发器变化
-  onRefreshTriggerChange(): void {
-    if (this.refreshTrigger > 0) {
-      this.onRefresh();
+  onPostUpdateChange(): void {
+    if (!this.postUpdateJson) {
+      return;
     }
+
+    try {
+      const update = JSON.parse(this.postUpdateJson) as PostUpdateInfo;
+      this.applyPostUpdate(update);
+    } catch (e) {
+      console.error('[Community] 解析更新数据失败');
+    }
+
+    // 消费完毕，清空，避免重复触发
+    AppStorage.setOrCreate('communityPostUpdate', '');
   }
 
-  private loadPosts(): void {
-    this.postList = mockPosts;
+  /**
+   * 局部更新单条帖子，不影响滚动位置
+   */
+  private applyPostUpdate(update: PostUpdateInfo): void {
+    const index = this.postList.findIndex(p => p.id === update.postId);
+    if (index === -1) {
+      return; // 列表中找不到该帖子，忽略
+    }
+
+    const original = this.postList[index];
+    const updated = this.clonePost(original);
+
+    // 用详情页返回的最新数据覆盖
+    updated.isLiked = update.isLiked;
+    updated.isCollected = update.isCollected;
+    updated.likeCount = update.likeCount;
+    updated.collectCount = update.collectCount;
+    updated.commentCount = update.commentCount;
+    updated.shareCount = update.shareCount;
+
+    // 仅替换这一条，整个数组引用更新以触发 @State 响应
+    const newList: Post[] = [];
+    for (let i = 0; i < this.postList.length; i++) {
+      if (i === index) {
+        newList.push(updated);
+      } else {
+        newList.push(this.postList[i]);
+      }
+    }
+    this.postList = newList;
+
+    console.info(`[Community] 局部更新帖子 ${update.postId} 成功`);
   }
 
-  private onRefresh(): void {
-    this.isRefreshing = true;
-    setTimeout(() => {
-      this.postList = getRecommendPosts(1, 5);
+  /**
+   * 加载帖子列表
+   */
+  private async loadPosts(isRefresh: boolean = false): Promise<void> {
+    if (isRefresh) {
+      this.currentPage = 1;
+      this.isRefreshing = true;
+      this.errorMessage = '';
+    } else {
+      if (this.isLoadingMore || this.currentPage >= this.totalPages) {
+        return;
+      }
+      this.isLoadingMore = true;
+      this.currentPage += 1;
+    }
+
+    try {
+      const orderBy = this.currentSubTab === 0 ? 'latest' : 'hot';
+      const result: PaginatedPosts = await ApiService.getPosts(this.currentPage, 20, orderBy);
+
+      const newPosts: Post[] = [];
+      for (const apiPost of result.items) {
+        newPosts.push(this.convertApiPost(apiPost));
+      }
+
+      if (isRefresh) {
+        this.postList = newPosts;
+        // 显示刷新成功气泡
+        this.showRefreshSuccess(`已刷新 ${newPosts.length} 条动态`);
+      } else {
+        const combined: Post[] = [];
+        for (const p of this.postList) {
+          combined.push(p);
+        }
+        for (const p of newPosts) {
+          combined.push(p);
+        }
+        this.postList = combined;
+      }
+
+      this.totalPages = result.totalPages;
+      this.errorMessage = '';
+
+    } catch (error) {
+      const err = error as Error;
+      this.errorMessage = err.message || '加载失败';
+      console.error('[Community] 加载帖子失败:', err.message);
+    } finally {
       this.isRefreshing = false;
-    }, 1000);
+      this.isLoadingMore = false;
+    }
   }
 
-  private onLike(post: Post): void {
+  /**
+   * 显示刷新成功气泡
+   */
+  private showRefreshSuccess(message: string): void {
+    this.toastMessage = message;
+    this.showRefreshToast = true;
+
+    // 2秒后自动消失
+    setTimeout(() => {
+      this.showRefreshToast = false;
+    }, 2000);
+  }
+
+  /**
+   * 转换后端数据为前端 Post 结构
+   */
+  private convertApiPost(apiPost: ApiPost): Post {
+    const author: PostAuthor = {
+      id: apiPost.author.id,
+      nickname: apiPost.author.nickname,
+      avatar: apiPost.author.avatar,
+      level: apiPost.author.level,
+      levelTitle: apiPost.author.levelTitle,
+    };
+
+    const post: Post = {
+      id: apiPost.id,
+      author: author,
+      content: apiPost.content,
+      images: apiPost.images,
+      tags: apiPost.tags,
+      likeCount: apiPost.likeCount,
+      commentCount: apiPost.commentCount,
+      shareCount: apiPost.shareCount,
+      collectCount: apiPost.collectCount,
+      isLiked: apiPost.isLiked,
+      isCollected: apiPost.isCollected,
+      createdAt: apiPost.createdAt,
+      type: apiPost.type as 'image' | 'video',
+      hotComments: [],
+    };
+
+    if (apiPost.video) {
+      post.video = apiPost.video;
+    }
+
+    if (apiPost.city !== null) {
+      const location: PostLocation = {
+        cityId: apiPost.city.id,
+        cityName: apiPost.city.name,
+      };
+      if (apiPost.address) {
+        location.address = apiPost.address;
+      }
+      if (apiPost.latitude) {
+        location.latitude = apiPost.latitude;
+      }
+      if (apiPost.longitude) {
+        location.longitude = apiPost.longitude;
+      }
+      post.location = location;
+    }
+
+    return post;
+  }
+
+  /**
+   * 下拉刷新
+   */
+  private onRefresh(): void {
+    console.info('[Community] 触发下拉刷新');
+    this.loadPosts(true);
+  }
+
+  /**
+   * 上拉加载更多
+   */
+  private onReachEnd(): void {
+    console.info(`[Community] 触发上拉加载: 当前页=${this.currentPage}, 总页数=${this.totalPages}`);
+    if (!this.isLoadingMore && this.currentPage < this.totalPages) {
+      this.loadPosts(false);
+    }
+  }
+
+  /**
+   * 点赞/取消点赞
+   */
+  private async onLike(post: Post): Promise<void> {
     const index = this.postList.findIndex(p => p.id === post.id);
-    if (index !== -1) {
-      const source = this.postList[index];
-      const updatedPost = this.clonePost(source);
-      updatedPost.isLiked = !source.isLiked;
-      updatedPost.likeCount = source.likeCount + (updatedPost.isLiked ? 1 : -1);
-      this.postList[index] = updatedPost;
+    if (index === -1) return;
+
+    const originalPost = this.postList[index];
+    const wasLiked = originalPost.isLiked;
+
+    // 乐观更新
+    const updatedPost = this.clonePost(originalPost);
+    updatedPost.isLiked = !wasLiked;
+    updatedPost.likeCount = Math.max(0, originalPost.likeCount + (updatedPost.isLiked ? 1 : -1));
+
+    const newList: Post[] = [];
+    for (let i = 0; i < this.postList.length; i++) {
+      if (i === index) {
+        newList.push(updatedPost);
+      } else {
+        newList.push(this.postList[i]);
+      }
+    }
+    this.postList = newList;
+
+    try {
+      let result: LikeResult;
+      if (wasLiked) {
+        result = await ApiService.unlikePost(post.id);
+      } else {
+        result = await ApiService.likePost(post.id);
+      }
+
+      // 用后端返回的真实计数更新
+      const syncPost = this.clonePost(updatedPost);
+      syncPost.likeCount = result.likeCount;
+
+      const syncList: Post[] = [];
+      for (let i = 0; i < this.postList.length; i++) {
+        if (i === index) {
+          syncList.push(syncPost);
+        } else {
+          syncList.push(this.postList[i]);
+        }
+      }
+      this.postList = syncList;
+
+    } catch (error) {
+      // 回滚
+      const rollbackList: Post[] = [];
+      for (let i = 0; i < this.postList.length; i++) {
+        if (i === index) {
+          rollbackList.push(originalPost);
+        } else {
+          rollbackList.push(this.postList[i]);
+        }
+      }
+      this.postList = rollbackList;
+
+      const err = error as Error;
+      console.error('[Community] 点赞失败:', err.message);
+    }
+  }
+
+  private async onCollect(post: Post): Promise<void> {
+    const index = this.postList.findIndex(p => p.id === post.id);
+    if (index === -1) return;
+
+    const originalPost = this.postList[index];
+    const wasCollected = originalPost.isCollected;
+
+    const updatedPost = this.clonePost(originalPost);
+    updatedPost.isCollected = !wasCollected;
+    updatedPost.collectCount = Math.max(0, originalPost.collectCount + (updatedPost.isCollected ? 1 : -1));
+
+    const newList: Post[] = [];
+    for (let i = 0; i < this.postList.length; i++) {
+      if (i === index) {
+        newList.push(updatedPost);
+      } else {
+        newList.push(this.postList[i]);
+      }
+    }
+    this.postList = newList;
+
+    try {
+      let result: CollectResult;
+      if (wasCollected) {
+        result = await ApiService.uncollectPost(post.id);
+      } else {
+        result = await ApiService.collectPost(post.id);
+      }
+
+      const syncPost = this.clonePost(updatedPost);
+      syncPost.collectCount = result.collectCount;
+
+      const syncList: Post[] = [];
+      for (let i = 0; i < this.postList.length; i++) {
+        if (i === index) {
+          syncList.push(syncPost);
+        } else {
+          syncList.push(this.postList[i]);
+        }
+      }
+      this.postList = syncList;
+
+    } catch (error) {
+      const rollbackList: Post[] = [];
+      for (let i = 0; i < this.postList.length; i++) {
+        if (i === index) {
+          rollbackList.push(originalPost);
+        } else {
+          rollbackList.push(this.postList[i]);
+        }
+      }
+      this.postList = rollbackList;
+
+      const err = error as Error;
+      console.error('[Community] 收藏失败:', err.message);
     }
   }
 
@@ -68,38 +349,6 @@ export struct CommunityPage {
       url: 'pages/community/PostDetailPage',
       params: { postId: post.id }
     }).catch(() => {});
-  }
-
-  private onCollect(post: Post): void {
-    const index = this.postList.findIndex(p => p.id === post.id);
-    if (index !== -1) {
-      const source = this.postList[index];
-      const updatedPost = this.clonePost(source);
-      updatedPost.isCollected = !source.isCollected;
-      updatedPost.collectCount = source.collectCount + (updatedPost.isCollected ? 1 : -1);
-      this.postList[index] = updatedPost;
-    }
-  }
-
-  private clonePost(source: Post): Post {
-    return {
-      id: source.id,
-      author: source.author,
-      content: source.content,
-      images: source.images ? source.images.slice() : [],
-      video: source.video,
-      location: source.location,
-      tags: source.tags ? source.tags.slice() : [],
-      likeCount: source.likeCount,
-      commentCount: source.commentCount,
-      shareCount: source.shareCount,
-      collectCount: source.collectCount,
-      isLiked: source.isLiked,
-      isCollected: source.isCollected,
-      createdAt: source.createdAt,
-      type: source.type,
-      hotComments: source.hotComments,
-    };
   }
 
   private onShare(post: Post): void {
@@ -121,26 +370,63 @@ export struct CommunityPage {
     }).catch(() => {});
   }
 
+  private clonePost(source: Post): Post {
+    const authorCopy: PostAuthor = {
+      id: source.author.id,
+      nickname: source.author.nickname,
+      avatar: source.author.avatar,
+      level: source.author.level,
+      levelTitle: source.author.levelTitle,
+    };
+
+    const cloned: Post = {
+      id: source.id,
+      author: authorCopy,
+      content: source.content,
+      images: source.images.slice(),
+      tags: source.tags.slice(),
+      likeCount: source.likeCount,
+      commentCount: source.commentCount,
+      shareCount: source.shareCount,
+      collectCount: source.collectCount,
+      isLiked: source.isLiked,
+      isCollected: source.isCollected,
+      createdAt: source.createdAt,
+      type: source.type,
+    };
+
+    if (source.video) {
+      cloned.video = source.video;
+    }
+
+    if (source.location) {
+      const locCopy: PostLocation = {
+        cityId: source.location.cityId,
+        cityName: source.location.cityName,
+      };
+      if (source.location.address) {
+        locCopy.address = source.location.address;
+      }
+      cloned.location = locCopy;
+    }
+
+    return cloned;
+  }
+
   build() {
     Stack() {
-      // 内容区域（底层）
       Column() {
-        // 顶部占位（为固定的TopTabBar和SubTabBar留出空间）
-        Row().height(108) // 28(状态栏) + 42(TopTabBar) + 38(SubTabBar)
+        Row().height(108)
 
-        // 内容区域
         if (this.currentMainTab === 1) {
-          // 社区 - 图文列表
           this.CommunityContent()
         } else {
-          // 视频 - 视频卡
           this.VideoContent()
         }
       }
       .width('100%')
       .height('100%')
 
-      // 顶部Tab栏（悬浮层）
       Column() {
         this.TopTabBar()
         this.SubTabBar()
@@ -148,7 +434,6 @@ export struct CommunityPage {
       .width('100%')
       .position({ x: 0, y: 0 })
 
-      // 转发分享弹窗
       SharePanel({
         isShow: this.showSharePanel,
         onClose: () => { this.showSharePanel = false; },
@@ -165,10 +450,8 @@ export struct CommunityPage {
   @Builder
   TopTabBar() {
     Column() {
-      // 状态栏占位
       Row().height(28)
 
-      // Tab内容区域
       Row() {
         ForEach(this.mainTabs, (tab: string, index: number) => {
           Column() {
@@ -222,7 +505,10 @@ export struct CommunityPage {
         .layoutWeight(1)
         .padding({ left: 6, right: 6 })
         .onClick(() => {
-          this.currentSubTab = index;
+          if (this.currentSubTab !== index) {
+            this.currentSubTab = index;
+            this.loadPosts(true);
+          }
         })
       })
     }
@@ -236,35 +522,138 @@ export struct CommunityPage {
 
   @Builder
   CommunityContent() {
-    Refresh({ refreshing: $$this.isRefreshing }) {
-      List() {
-        ForEach(this.postList, (post: Post, index: number) => {
-          ListItem() {
-            this.EnhancedPostCard(post)
+    Stack() {
+      Refresh({ refreshing: $$this.isRefreshing }) {
+        List() {
+          // 错误提示
+          if (this.errorMessage) {
+            ListItem() {
+              Row() {
+                Text('⚠️')
+                  .fontSize(14)
+                Text(this.errorMessage)
+                  .fontSize(13)
+                  .fontColor('#EF4444')
+                  .margin({ left: 6 })
+                Text(' 点击重试')
+                  .fontSize(13)
+                  .fontColor('#38BDF8')
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+              .backgroundColor('#FEF2F2')
+              .borderRadius(10)
+              .margin({ top: 10, bottom: 10 })
+              .onClick(() => {
+                this.loadPosts(true);
+              })
+            }
           }
-        }, (post: Post) => post.id)
 
-        // 底部安全区域，为悬浮的dock栏留出空间
-        ListItem() {
-          Row().height(80)
+          // 空状态
+          if (this.postList.length === 0 && !this.isRefreshing && !this.errorMessage) {
+            ListItem() {
+              Column() {
+                Text('📭')
+                  .fontSize(48)
+                Text('暂无动态')
+                  .fontSize(14)
+                  .fontColor('#94A3B8')
+                  .margin({ top: 12 })
+                Text('下拉刷新试试')
+                  .fontSize(12)
+                  .fontColor('#CBD5E1')
+                  .margin({ top: 4 })
+              }
+              .width('100%')
+              .padding({ top: 80 })
+              .alignItems(HorizontalAlign.Center)
+            }
+          }
+
+          ForEach(this.postList, (post: Post) => {
+            ListItem() {
+              this.EnhancedPostCard(post)
+            }
+          }, (post: Post) => `${post.id}_${post.likeCount}_${post.collectCount}_${post.isLiked}_${post.isCollected}`)
+
+          // 加载更多
+          if (this.isLoadingMore) {
+            ListItem() {
+              Row() {
+                LoadingProgress()
+                  .width(24)
+                  .height(24)
+                  .color('#38BDF8')
+                Text('加载中...')
+                  .fontSize(13)
+                  .fontColor('#94A3B8')
+                  .margin({ left: 8 })
+              }
+              .width('100%')
+              .height(60)
+              .justifyContent(FlexAlign.Center)
+            }
+          } else if (this.currentPage >= this.totalPages && this.postList.length > 0) {
+            ListItem() {
+              Text('— 没有更多了 —')
+                .fontSize(13)
+                .fontColor('#CBD5E1')
+                .width('100%')
+                .height(50)
+                .textAlign(TextAlign.Center)
+            }
+          }
+
+          // 底部安全区
+          ListItem() {
+            Row().height(80)
+          }
         }
+        .width('100%')
+        .padding({ left: 12, right: 12 })
+        .scrollBar(BarState.Off)
+        .divider({ strokeWidth: 0 })
+        .edgeEffect(EdgeEffect.Spring)
+        .onReachEnd(() => {
+          this.onReachEnd();
+        })
       }
+      .onRefreshing(() => {
+        this.onRefresh();
+      })
       .width('100%')
-      .padding({ left: 12, right: 12 })
-      .scrollBar(BarState.Off)
-      .divider({ strokeWidth: 0 })
-      .edgeEffect(EdgeEffect.Spring)
+      .layoutWeight(1)
+
+      // 刷新成功气泡
+      if (this.showRefreshToast) {
+        Column() {
+          Row() {
+            Text('✓')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+            Text(this.toastMessage)
+              .fontSize(13)
+              .fontColor('#FFFFFF')
+              .margin({ left: 6 })
+          }
+          .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          .backgroundColor('rgba(0, 0, 0, 0.7)')
+          .borderRadius(20)
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+        .position({ x: 0, y: 10 })
+      }
     }
-    .onRefreshing(() => this.onRefresh())
     .width('100%')
     .layoutWeight(1)
   }
 
-  // 优化的帖子卡片 - 抖音/微博风格
   @Builder
   EnhancedPostCard(post: Post) {
     Row() {
-      // 左侧头像 - 点击跳转用户主页
+      // 左侧头像 - 点击跳转用户主页（阻止冒泡）
       Column() {
         Text(post.author.nickname.charAt(0))
           .fontSize(18)
@@ -280,7 +669,10 @@ export struct CommunityPage {
       })
       .justifyContent(FlexAlign.Center)
       .margin({ right: 12 })
-      .onClick(() => this.navigateToUser(post.author.id))
+      .onClick((event: ClickEvent) => {
+        // 阻止冒泡，只跳转用户
+        this.navigateToUser(post.author.id);
+      })
 
       // 右侧内容区
       Column() {
@@ -297,38 +689,33 @@ export struct CommunityPage {
               .margin({ top: 1 })
           }
           .alignItems(HorizontalAlign.Start)
-          .onClick(() => this.navigateToUser(post.author.id))
+          .onClick((event: ClickEvent) => {
+            this.navigateToUser(post.author.id);
+          })
 
           Blank()
 
           Text('···')
             .fontSize(18)
             .fontColor('#C0C0C0')
+            .onClick((event: ClickEvent) => {
+              // 更多菜单
+            })
         }
         .width('100%')
 
-        // 内容文本
+        // 内容文本（点击穿透到整卡）
         Column() {
-          Column() {
-            Text(post.content)
-              .fontSize(15)
-              .fontColor('#333333')
-              .lineHeight(22)
-              .margin({ top: 6 })
-              .width('100%')
-              .maxLines(4)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .onClick(() => this.onComment(post))
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .gesture(
-            TapGesture({ count: 2 }).onAction(() => {
-              this.onLike(post)
-            })
-          )
+          Text(post.content)
+            .fontSize(15)
+            .fontColor('#333333')
+            .lineHeight(22)
+            .margin({ top: 6 })
+            .width('100%')
+            .maxLines(4)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          // 图片网格
+          // 图片网格（点击图片预览，阻止冒泡）
           if (post.images && post.images.length > 0) {
             Column() {
               this.WechatStyleImageGrid(post.images, post)
@@ -337,78 +724,29 @@ export struct CommunityPage {
             .alignItems(HorizontalAlign.Start)
           }
 
+          // 位置 + 时间
           Column() {
-            // 位置 + 时间
             Row() {
-              Row() {
-                if (post.location && post.location.cityName) {
-                  Text(post.location.cityName)
-                    .fontSize(12)
-                    .fontColor('#38BDF8')
-                    .margin({ right: 8 })
-                }
-                Text(this.formatTime(post.createdAt))
+              if (post.location && post.location.cityName) {
+                Text(post.location.cityName)
                   .fontSize(12)
-                  .fontColor('#B0B0B0')
+                  .fontColor('#38BDF8')
+                  .margin({ right: 8 })
               }
+              Text(this.formatTime(post.createdAt))
+                .fontSize(12)
+                .fontColor('#B0B0B0')
             }
             .width('100%')
             .margin({ top: 10 })
-            .onClick(() => this.onComment(post))
-
-            // 热门评论（1-2条）
-            if (post.hotComments && post.hotComments.length > 0) {
-              Column() {
-                ForEach(post.hotComments.slice(0, 2), (comment: PostComment) => {
-                  Row() {
-                    Text(comment.userNickname)
-                      .fontSize(13)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor('#475569')
-                      .onClick(() => this.navigateToUser(comment.userId))
-                    Text(`：${comment.content}`)
-                      .fontSize(13)
-                      .fontColor('#64748B')
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-                      .layoutWeight(1)
-                      .onClick(() => this.onComment(post))
-                  }
-                  .width('100%')
-                  .margin({ bottom: 4 })
-                })
-
-                // 查看全部评论
-                if (post.commentCount > 2) {
-                  Text(`查看全部 ${post.commentCount} 条评论`)
-                    .fontSize(12)
-                    .fontColor('#94A3B8')
-                    .margin({ top: 2 })
-                    .onClick(() => this.onComment(post))
-                }
-              }
-              .width('100%')
-              .padding({ left: 10, right: 10, top: 8, bottom: 8 })
-              .backgroundColor('#F8FAFC')
-              .borderRadius(8)
-              .margin({ top: 8 })
-              .onClick(() => this.onComment(post))
-            }
-
-            Row().height(6).width('100%').onClick(() => this.onComment(post))
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
-          .gesture(
-            TapGesture({ count: 2 }).onAction(() => {
-              this.onLike(post)
-            })
-          )
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
 
-        // 操作按钮栏
+        // 操作按钮栏（阻止冒泡）
         Row() {
           // 点赞
           Row() {
@@ -421,7 +759,9 @@ export struct CommunityPage {
                 .margin({ left: 4 })
             }
           }
-          .onClick(() => this.onLike(post))
+          .onClick((event: ClickEvent) => {
+            this.onLike(post);
+          })
 
           // 评论
           Row() {
@@ -434,7 +774,24 @@ export struct CommunityPage {
                 .margin({ left: 4 })
             }
           }
-          .onClick(() => this.onComment(post))
+          .onClick((event: ClickEvent) => {
+            this.onComment(post);
+          })
+
+          // 收藏
+          Row() {
+            Text('⭐')
+              .fontSize(14)
+            if (post.collectCount > 0) {
+              Text(`${this.formatCount(post.collectCount)}`)
+                .fontSize(12)
+                .fontColor(post.isCollected ? '#38BDF8' : '#888888')
+                .margin({ left: 4 })
+            }
+          }
+          .onClick((event: ClickEvent) => {
+            this.onCollect(post);
+          })
 
           // 转发
           Row() {
@@ -447,7 +804,9 @@ export struct CommunityPage {
                 .margin({ left: 4 })
             }
           }
-          .onClick(() => this.onShare(post))
+          .onClick((event: ClickEvent) => {
+            this.onShare(post);
+          })
         }
         .width('100%')
         .margin({ top: 10 })
@@ -461,30 +820,29 @@ export struct CommunityPage {
     .alignItems(VerticalAlign.Top)
     .backgroundColor('#FFFFFF')
     .border({ width: { bottom: 0.5 }, color: '#ECECEC' })
+    .onClick(() => {
+      // 整卡点击 -> 跳转详情
+      this.onComment(post);
+    })
   }
 
-  // 微信朋友圈风格图片网格
   @Builder
   WechatStyleImageGrid(images: string[], post: Post) {
     Column() {
       if (images.length === 1) {
-        // 单图 - 较大尺寸
         this.ImageItem(post, images, 0, 180, 180)
       } else if (images.length === 2) {
-        // 2张图 - 横向并排
         Row({ space: 4 }) {
           this.ImageItem(post, images, 0, 120, 120)
           this.ImageItem(post, images, 1, 120, 120)
         }
       } else if (images.length === 3) {
-        // 3张图 - 横向并排
         Row({ space: 4 }) {
           this.ImageItem(post, images, 0, 80, 80)
           this.ImageItem(post, images, 1, 80, 80)
           this.ImageItem(post, images, 2, 80, 80)
         }
       } else if (images.length === 4) {
-        // 4张图 - 2x2网格
         Column({ space: 4 }) {
           Row({ space: 4 }) {
             this.ImageItem(post, images, 0, 120, 120)
@@ -495,21 +853,7 @@ export struct CommunityPage {
             this.ImageItem(post, images, 3, 120, 120)
           }
         }
-      } else if (images.length === 5) {
-        // 5张图 - 上面2张+ 下面3张
-        Column({ space: 4 }) {
-          Row({ space: 4 }) {
-            this.ImageItem(post, images, 0, 120, 120)
-            this.ImageItem(post, images, 1, 120, 120)
-          }
-          Row({ space: 4 }) {
-            this.ImageItem(post, images, 2, 78, 78)
-            this.ImageItem(post, images, 3, 78, 78)
-            this.ImageItem(post, images, 4, 78, 78)
-          }
-        }
-      } else if (images.length === 6) {
-        // 6张图 - 3x2网格
+      } else if (images.length >= 5) {
         Column({ space: 4 }) {
           Row({ space: 4 }) {
             this.ImageItem(post, images, 0, 78, 78)
@@ -519,21 +863,9 @@ export struct CommunityPage {
           Row({ space: 4 }) {
             this.ImageItem(post, images, 3, 78, 78)
             this.ImageItem(post, images, 4, 78, 78)
-            this.ImageItem(post, images, 5, 78, 78)
-          }
-        }
-      } else {
-        // 7-9张图 - 3x3网格
-        Column({ space: 4 }) {
-          Row({ space: 4 }) {
-            this.ImageItem(post, images, 0, 78, 78)
-            this.ImageItem(post, images, 1, 78, 78)
-            this.ImageItem(post, images, 2, 78, 78)
-          }
-          Row({ space: 4 }) {
-            this.ImageItem(post, images, 3, 78, 78)
-            this.ImageItem(post, images, 4, 78, 78)
-            this.ImageItem(post, images, 5, 78, 78)
+            if (images.length > 5) {
+              this.ImageItem(post, images, 5, 78, 78)
+            }
           }
           if (images.length > 6) {
             Row({ space: 4 }) {
@@ -552,43 +884,27 @@ export struct CommunityPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  // 单个图片集- 带尺寸参数
   @Builder
   ImageItem(post: Post, images: string[], index: number, w: number, h: number) {
     Stack() {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#E8E8E8')
+        .borderRadius(4)
+
       Image(images[index])
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Cover)
+        .borderRadius(4)
     }
     .width(w)
     .height(h)
-    .backgroundColor('#E8E8E8')
-    .borderRadius(4)
-    .linearGradient({
-      direction: GradientDirection.RightBottom,
-      colors: [
-        [this.getGridColor(index), 0],
-        [this.getGridColorEnd(index), 1]
-      ]
+    .onClick((event: ClickEvent) => {
+      // 阻止冒泡，只预览图片
+      this.openImagePreview(post, index);
     })
-    .onClick(() => this.openImagePreview(post, index))
-  }
-
-  // 保留旧的ImageGrid以兼容
-  @Builder
-  ImageGrid(images: string[], post: Post) {
-    this.WechatStyleImageGrid(images, post)
-  }
-
-  private getGridColor(index: number): string {
-    const colors = ['#E0F2FE', '#CFFAFE', '#BAE6FD', '#A5F3FC', '#BAE6FD', '#D1D5DB'];
-    return colors[index % colors.length];
-  }
-
-  private getGridColorEnd(index: number): string {
-    const colors = ['#7DD3FC', '#4F46E5', '#38BDF8', '#6366F1', '#38BDF8', '#6B7280'];
-    return colors[index % colors.length];
   }
 
   private formatTime(dateStr: string): string {
@@ -614,101 +930,13 @@ export struct CommunityPage {
 
   @Builder
   VideoContent() {
-    Scroll() {
-      Column() {
-        this.VideoCard('🏔️', '我在云南香格里拉', '背包客小凡', '2.3w', '1280')
-        this.VideoCard('🌊', '巴厘岛冲浪日记', '冲浪少女', '1.8w', '956')
-        this.VideoCard('🗼', '巴黎铁塔的日落', '旅行摄影师', '3.1w', '2341')
-        this.VideoCard('🏯', '日本京都和服体验', '和风旅人', '1.5w', '876')
-        this.VideoCard('🌸', '樱花季的东京', '樱花控', '2.7w', '1567')
-        this.VideoCard('🏜️', '穿越撒哈拉沙漠', '极限挑战者', '4.2w', '3210')
-
-        // 底部安全区域
-        Row().height(80)
-      }
-      .padding({ left: Spacing.pagePadding, right: Spacing.pagePadding, top: Spacing.md })
+    Column() {
+      Text('视频功能开发中...')
+        .fontSize(14)
+        .fontColor('#94A3B8')
     }
     .width('100%')
     .layoutWeight(1)
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring)
-  }
-
-  @Builder
-  VideoCard(emoji: string, title: string, author: string, views: string, likes: string) {
-    Column() {
-      Stack() {
-        Column()
-          .width('100%')
-          .height(200)
-          .backgroundColor('#E0F2FE')
-          .borderRadius({ topLeft: Radius.card, topRight: Radius.card })
-
-        Text(emoji)
-          .fontSize(60)
-
-        Column() {
-          Text('▶')
-            .fontSize(24)
-            .fontColor(Colors.textWhite)
-        }
-        .width(56)
-        .height(56)
-        .backgroundColor('rgba(0,0,0,0.5)')
-        .borderRadius(28)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-
-        Row() {
-          Text('播放')
-            .fontSize(12)
-            .fontColor(Colors.textWhite)
-          Text(views)
-            .fontSize(FontSizes.small)
-            .fontColor(Colors.textWhite)
-            .margin({ left: 4 })
-        }
-        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-        .backgroundColor('rgba(0,0,0,0.5)')
-        .borderRadius(Radius.full)
-        .position({ x: 12, y: 166 })
-      }
-
-      Column() {
-        Text(title)
-          .fontSize(FontSizes.body)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Colors.textPrimary)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Row() {
-          Text('👤')
-            .fontSize(12)
-          Text(author)
-            .fontSize(FontSizes.small)
-            .fontColor(Colors.textTertiary)
-            .margin({ left: 4 })
-
-          Blank()
-
-          Text('❤️')
-            .fontSize(12)
-          Text(likes)
-            .fontSize(FontSizes.small)
-            .fontColor(Colors.textTertiary)
-            .margin({ left: 4 })
-        }
-        .width('100%')
-        .margin({ top: 8 })
-      }
-      .width('100%')
-      .padding(12)
-      .alignItems(HorizontalAlign.Start)
-    }
-    .width('100%')
-    .backgroundColor(Colors.bgPrimary)
-    .borderRadius(Radius.card)
-    .margin({ bottom: Spacing.cardMargin })
+    .justifyContent(FlexAlign.Center)
   }
 }

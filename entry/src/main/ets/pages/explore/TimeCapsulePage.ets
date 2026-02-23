@@ -3,21 +3,7 @@
  */
 
 import { router } from '@kit.ArkUI';
-
-interface TimeCapsule {
-  id: string;
-  content: string;
-  images: string[];
-  targetDate: string;
-  createdAt: string;
-  location: CapsuleLocation;
-  status: 'locked' | 'unlocked';
-}
-
-interface CapsuleLocation {
-  cityName: string;
-  address: string;
-}
+import { TimeCapsule, CapsuleLocation } from '../../models/TimeCapsule'; 
 
 @Entry
 @Component
