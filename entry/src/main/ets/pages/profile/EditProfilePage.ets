@@ -1,48 +1,177 @@
 ﻿/**
- * 编辑资料页面 - 类似抖音风格
+ * 编辑资料页面 - 真实输入与 API 保存
  */
 
-import { Colors, FontSizes, Spacing, Radius } from '../../utils/Constants';
-import { mockCurrentUser } from '../../services/MockData';
-import { router } from '@kit.ArkUI';
-import { promptAction } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
+import { ApiService, ApiUser, UpdateProfileParams } from '../../services/ApiService';
 
-// 性别选项
 type GenderType = '男' | '女' | '保密';
 
-@Entry
-@Component
-struct EditProfilePage {
-  @State nickname: string = mockCurrentUser.nickname || '旅行者';
-  @State bio: string = mockCurrentUser.bio || '走遍世界，一步一个脚印';
-  @State gender: GenderType = '保密';
-  @State birthday: string = '1995-06-15';
-  @State location: string = '上海';
-  @State traquickId: string = 'TraQuick_' + mockCurrentUser.id;
-  
-  // 编辑状态
-  @State isEditingNickname: boolean = false;
-  @State isEditingBio: boolean = false;
-  @State tempNickname: string = '';
-  @State tempBio: string = '';
-  
-  // 头像选择
-  @State showAvatarPicker: boolean = false;
+// ==================== 自定义输入弹窗 ====================
+@CustomDialog
+struct TextInputDialog {
+  controller: CustomDialogController
+  title: string = ''
+  placeholder: string = ''
+  textValue: string = ''
+  maxLength: number = 20
+  isTextArea: boolean = false
+  onConfirm: (value: string) => void = () => {}
 
   build() {
     Column() {
-      // 顶部导航栏
+      Text(this.title)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1E293B')
+        .margin({ top: 24, bottom: 16 })
+
+      if (this.isTextArea) {
+        TextArea({ text: this.textValue, placeholder: this.placeholder })
+          .height(100)
+          .maxLength(this.maxLength)
+          .backgroundColor('#F1F5F9')
+          .padding(12)
+          .margin({ left: 20, right: 20, bottom: 24 })
+          .onChange((value: string) => { this.textValue = value })
+      } else {
+        TextInput({ text: this.textValue, placeholder: this.placeholder })
+          .height(48)
+          .maxLength(this.maxLength)
+          .backgroundColor('#F1F5F9')
+          .padding({ left: 16, right: 16 })
+          .margin({ left: 20, right: 20, bottom: 24 })
+          .onChange((value: string) => { this.textValue = value })
+      }
+
+      Row() {
+        Text('取消')
+          .fontSize(16)
+          .fontColor('#64748B')
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+          .onClick(() => { this.controller.close() })
+
+        Column().width(1).height(24).backgroundColor('#E2E8F0')
+
+        Text('确定')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#38BDF8')
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+          .onClick(() => {
+            this.onConfirm(this.textValue);
+            this.controller.close();
+          })
+      }
+      .width('100%')
+      .height(50)
+      .border({ width: { top: 1 }, color: '#F1F5F9' })
+    }
+    .backgroundColor('#FFFFFF')
+    .borderRadius(16)
+    .width('80%')
+  }
+}
+
+// ==================== 主页面 ====================
+@Entry
+@Component
+struct EditProfilePage {
+  @State nickname: string = '';
+  @State bio: string = '';
+  @State gender: GenderType = '保密';
+  @State birthday: string = '1995-06-15';
+  @State location: string = '上海';
+  @State traquickId: string = '';
+  @State avatar: string = '';
+
+  @State isLoading: boolean = false;
+
+  // 昵称弹窗控制器
+  nicknameDialogController: CustomDialogController = new CustomDialogController({
+    builder: TextInputDialog({
+      title: '修改昵称',
+      placeholder: '请输入新昵称',
+      textValue: this.nickname,
+      maxLength: 15,
+      isTextArea: false,
+      onConfirm: (value: string) => {
+        this.nickname = value;
+      }
+    }),
+    autoCancel: true,
+    alignment: DialogAlignment.Center
+  });
+
+  // 简介弹窗控制器
+  bioDialogController: CustomDialogController = new CustomDialogController({
+    builder: TextInputDialog({
+      title: '修改简介',
+      placeholder: '介绍一下自己吧...',
+      textValue: this.bio,
+      maxLength: 50,
+      isTextArea: true,
+      onConfirm: (value: string) => {
+        this.bio = value;
+      }
+    }),
+    autoCancel: true,
+    alignment: DialogAlignment.Center
+  });
+
+  aboutToAppear(): void {
+    this.loadProfile();
+  }
+
+  private async loadProfile(): Promise<void> {
+    try {
+      const apiUser: ApiUser = await ApiService.getProfile();
+      this.nickname = apiUser.nickname;
+      this.bio = apiUser.bio || '';
+      this.avatar = apiUser.avatar;
+      this.traquickId = 'TraQuick_' + apiUser.id.substring(0, 8);
+    } catch (error) {
+      console.error('[EditProfile] 加载失败');
+    }
+  }
+
+  private async saveProfile(): Promise<void> {
+    if (this.isLoading) return;
+    this.isLoading = true;
+
+    try {
+      const params = new UpdateProfileParams();
+      params.nickname = this.nickname;
+      params.bio = this.bio;
+      params.avatar = this.avatar;
+
+      await ApiService.updateProfile(params);
+
+      // 更新本地缓存
+      AppStorage.setOrCreate('currentUserNickname', this.nickname);
+      AppStorage.setOrCreate('currentUserAvatar', this.avatar);
+
+      promptAction.showToast({ message: '保存成功' });
+      router.back();
+
+    } catch (error) {
+      const err = error as Error;
+      promptAction.showToast({ message: '保存失败: ' + err.message });
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  build() {
+    Column() {
       this.NavigationBar()
 
       Scroll() {
         Column() {
-          // 头像区域
           this.AvatarSection()
-
-          // 编辑项列表
           this.EditItemsList()
-
-          // 底部提示
           Text('个人信息仅用于展示，保护你的隐私安全')
             .fontSize(12)
             .fontColor('#94A3B8')
@@ -62,14 +191,8 @@ struct EditProfilePage {
   @Builder
   NavigationBar() {
     Column() {
-      // 状态栏占位
-      Row()
-        .width('100%')
-        .height(48)
-
-      // 导航内容
+      Row().width('100%').height(48)
       Row() {
-        // 返回按钮
         Row() {
           Text('←')
             .fontSize(28)
@@ -78,28 +201,25 @@ struct EditProfilePage {
         .width(44)
         .height(44)
         .justifyContent(FlexAlign.Center)
-        .onClick(() => {
-          router.back();
-        })
+        .onClick(() => { router.back(); })
 
         Blank()
-
         Text('编辑资料')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor('#1E293B')
-
         Blank()
 
-        // 保存按钮
-        Text('保存')
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#38BDF8')
-          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .onClick(() => {
-            this.saveProfile();
-          })
+        if (this.isLoading) {
+          LoadingProgress().width(24).height(24).color('#38BDF8')
+        } else {
+          Text('保存')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#38BDF8')
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .onClick(() => { this.saveProfile(); })
+        }
       }
       .width('100%')
       .height(56)
@@ -113,7 +233,6 @@ struct EditProfilePage {
   AvatarSection() {
     Column() {
       Stack() {
-        // 头像背景光晕
         Column()
           .width(108)
           .height(108)
@@ -123,17 +242,14 @@ struct EditProfilePage {
             colors: [['#7DD3FC', 0], ['#0EA5E9', 1]]
           })
 
-        // 头像
-        Image($r('app.media.layered_image'))
+        Image(this.avatar || $r('app.media.layered_image'))
           .width(100)
           .height(100)
           .borderRadius(50)
           .border({ width: 3, color: '#FFFFFF' })
 
-        // 编辑图标
         Column() {
-          Text('📷')
-            .fontSize(14)
+          Text('📷').fontSize(14)
         }
         .width(32)
         .height(32)
@@ -144,9 +260,7 @@ struct EditProfilePage {
         .alignItems(HorizontalAlign.Center)
         .position({ x: 72, y: 72 })
       }
-      .onClick(() => {
-        this.showAvatarOptions();
-      })
+      .onClick(() => { this.showAvatarOptions(); })
 
       Text('点击更换头像')
         .fontSize(13)
@@ -162,53 +276,53 @@ struct EditProfilePage {
   @Builder
   EditItemsList() {
     Column() {
-      // 基本信息分组
       this.SectionHeader('基本信息')
-      
       Column() {
         this.EditItem('昵称', this.nickname, () => {
-          this.startEditNickname();
+          // 更新弹窗初始值
+          this.nicknameDialogController = new CustomDialogController({
+            builder: TextInputDialog({
+              title: '修改昵称',
+              placeholder: '请输入新昵称',
+              textValue: this.nickname,
+              maxLength: 15,
+              onConfirm: (value: string) => { this.nickname = value; }
+            }),
+            autoCancel: true,
+            alignment: DialogAlignment.Center
+          });
+          this.nicknameDialogController.open();
         })
         this.Divider()
         this.EditItem('TraQuick ID', this.traquickId, undefined, false)
         this.Divider()
         this.EditItem('简介', this.bio || '填写简介，让大家认识你', () => {
-          this.startEditBio();
+          this.bioDialogController = new CustomDialogController({
+            builder: TextInputDialog({
+              title: '修改简介',
+              placeholder: '介绍一下自己吧...',
+              textValue: this.bio,
+              maxLength: 50,
+              isTextArea: true,
+              onConfirm: (value: string) => { this.bio = value; }
+            }),
+            autoCancel: true,
+            alignment: DialogAlignment.Center
+          });
+          this.bioDialogController.open();
         })
       }
       .backgroundColor('#FFFFFF')
       .borderRadius(12)
       .margin({ left: 16, right: 16 })
 
-      // 个人信息分组
       this.SectionHeader('个人信息')
-
       Column() {
-        this.EditItemWithValue('性别', this.gender, () => {
-          this.showGenderPicker();
-        })
+        this.EditItemWithValue('性别', this.gender, () => { this.showGenderPicker(); })
         this.Divider()
-        this.EditItemWithValue('生日', this.birthday, () => {
-          this.showBirthdayPicker();
-        })
+        this.EditItemWithValue('生日', this.birthday, () => { promptAction.showToast({ message: '日期选择暂未接入' }); })
         this.Divider()
-        this.EditItemWithValue('地区', this.location, () => {
-          this.showLocationPicker();
-        })
-      }
-      .backgroundColor('#FFFFFF')
-      .borderRadius(12)
-      .margin({ left: 16, right: 16 })
-
-      // 社交账号分组
-      this.SectionHeader('社交账号')
-
-      Column() {
-        this.EditItemWithIcon('🔗', '微信', '未绑定', () => {})
-        this.Divider()
-        this.EditItemWithIcon('📱', '手机号', '138****8888', () => {})
-        this.Divider()
-        this.EditItemWithIcon('📧', '邮箱', '未绑定', () => {})
+        this.EditItemWithValue('地区', this.location, () => { promptAction.showToast({ message: '地区选择暂未接入' }); })
       }
       .backgroundColor('#FFFFFF')
       .borderRadius(12)
@@ -218,21 +332,13 @@ struct EditProfilePage {
 
   @Builder
   SectionHeader(title: string) {
-    Text(title)
-      .fontSize(13)
-      .fontColor('#64748B')
-      .fontWeight(FontWeight.Medium)
-      .padding({ left: 28, top: 20, bottom: 8 })
+    Text(title).fontSize(13).fontColor('#64748B').fontWeight(FontWeight.Medium).padding({ left: 28, top: 20, bottom: 8 })
   }
 
   @Builder
   EditItem(label: string, value: string, onClick?: () => void, showArrow: boolean = true) {
     Row() {
-      Text(label)
-        .fontSize(15)
-        .fontColor('#1E293B')
-        .width(80)
-
+      Text(label).fontSize(15).fontColor('#1E293B').width(80)
       Text(value)
         .fontSize(15)
         .fontColor(value.includes('填写') ? '#94A3B8' : '#64748B')
@@ -240,194 +346,44 @@ struct EditProfilePage {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.End)
-
       if (showArrow) {
-        Text('›')
-          .fontSize(18)
-          .fontColor('#CBD5E1')
-          .margin({ left: 8 })
+        Text('›').fontSize(18).fontColor('#CBD5E1').margin({ left: 8 })
       }
     }
-    .width('100%')
-    .height(56)
-    .padding({ left: 16, right: 16 })
-    .onClick(() => {
-      if (onClick) {
-        onClick();
-      }
-    })
+    .width('100%').height(56).padding({ left: 16, right: 16 })
+    .onClick(() => { if (onClick) onClick(); })
   }
 
   @Builder
   EditItemWithValue(label: string, value: string, onClick: () => void) {
     Row() {
-      Text(label)
-        .fontSize(15)
-        .fontColor('#1E293B')
-        .width(80)
-
-      Text(value)
-        .fontSize(15)
-        .fontColor('#64748B')
-        .layoutWeight(1)
-        .textAlign(TextAlign.End)
-
-      Text('›')
-        .fontSize(18)
-        .fontColor('#CBD5E1')
-        .margin({ left: 8 })
+      Text(label).fontSize(15).fontColor('#1E293B').width(80)
+      Text(value).fontSize(15).fontColor('#64748B').layoutWeight(1).textAlign(TextAlign.End)
+      Text('›').fontSize(18).fontColor('#CBD5E1').margin({ left: 8 })
     }
-    .width('100%')
-    .height(56)
-    .padding({ left: 16, right: 16 })
-    .onClick(() => onClick())
-  }
-
-  @Builder
-  EditItemWithIcon(icon: string, label: string, value: string, onClick: () => void) {
-    Row() {
-      Text(icon)
-        .fontSize(20)
-        .margin({ right: 12 })
-
-      Text(label)
-        .fontSize(15)
-        .fontColor('#1E293B')
-        .layoutWeight(1)
-
-      Text(value)
-        .fontSize(14)
-        .fontColor(value === '未绑定' ? '#94A3B8' : '#64748B')
-
-      Text('›')
-        .fontSize(18)
-        .fontColor('#CBD5E1')
-        .margin({ left: 8 })
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 16, right: 16 })
+    .width('100%').height(56).padding({ left: 16, right: 16 })
     .onClick(() => onClick())
   }
 
   @Builder
   Divider() {
-    Column()
-      .width('100%')
-      .height(1)
-      .backgroundColor('#F1F5F9')
-      .margin({ left: 16 })
+    Column().width('100%').height(1).backgroundColor('#F1F5F9').margin({ left: 16 })
   }
 
-  // 开始编辑昵称
-  private startEditNickname(): void {
-    promptAction.showDialog({
-      title: '修改昵称',
-      message: '请输入新昵称（最多12个字符）',
-      buttons: [
-        { text: '取消', color: '#64748B' },
-        { text: '确定', color: '#38BDF8' }
-      ]
-    }).then((result) => {
-      if (result.index === 1) {
-        // 用户点击确定，这里可以弹出输入框
-        // 由于ArkUI限制，使用TextPickerDialog模拟
-      }
-    }).catch(() => {});
-  }
-
-  // 开始编辑简介
-  private startEditBio(): void {
-    promptAction.showDialog({
-      title: '修改简介',
-      message: '请输入个人简介（最多70个字符）',
-      buttons: [
-        { text: '取消', color: '#64748B' },
-        { text: '确定', color: '#38BDF8' }
-      ]
-    }).then((result) => {
-      if (result.index === 1) {
-        // 用户点击确定
-      }
-    }).catch(() => {});
-  }
-
-  // 显示头像选项
   private showAvatarOptions(): void {
     promptAction.showActionMenu({
       title: '更换头像',
-      buttons: [
-        { text: '拍照', color: '#1E293B' },
-        { text: '从相册选择', color: '#1E293B' },
-        { text: '取消', color: '#64748B' }
-      ]
-    }).then((result) => {
-      if (result.index === 0) {
-        // 拍照
-        this.showToast('打开相机...');
-      } else if (result.index === 1) {
-        // 从相册选择
-        this.showToast('打开相册...');
-      }
-    }).catch(() => {});
+      buttons: [{ text: '拍照', color: '#1E293B' }, { text: '相册', color: '#1E293B' }, { text: '取消', color: '#64748B' }]
+    });
   }
 
-  // 显示性别选择器
   private showGenderPicker(): void {
     promptAction.showActionMenu({
       title: '选择性别',
-      buttons: [
-        { text: '男', color: '#1E293B' },
-        { text: '女', color: '#1E293B' },
-        { text: '保密', color: '#1E293B' }
-      ]
-    }).then((result) => {
-      const options: GenderType[] = ['男', '女', '保密'];
-      if (result.index >= 0 && result.index < options.length) {
-        this.gender = options[result.index];
-      }
-    }).catch(() => {});
-  }
-
-  // 显示生日选择器
-  private showBirthdayPicker(): void {
-    // 由于DatePickerDialog需要特殊处理，这里使用简化的方式
-    this.showToast('日期选择器开发中...');
-  }
-
-  // 显示地区选择器
-  private showLocationPicker(): void {
-    promptAction.showActionMenu({
-      title: '选择地区',
-      buttons: [
-        { text: '北京', color: '#1E293B' },
-        { text: '上海', color: '#1E293B' },
-        { text: '广州', color: '#1E293B' },
-        { text: '深圳', color: '#1E293B' },
-        { text: '杭州', color: '#1E293B' },
-        { text: '成都', color: '#1E293B' }
-      ]
-    }).then((result) => {
-      const cities = ['北京', '上海', '广州', '深圳', '杭州', '成都'];
-      if (result.index >= 0 && result.index < cities.length) {
-        this.location = cities[result.index];
-      }
-    }).catch(() => {});
-  }
-
-  // 保存资料
-  private saveProfile(): void {
-    this.showToast('保存成功');
-    setTimeout(() => {
-      router.back();
-    }, 500);
-  }
-
-  // 显示Toast
-  private showToast(message: string): void {
-    promptAction.showToast({
-      message: message,
-      duration: 2000
+      buttons: [{ text: '男', color: '#1E293B' }, { text: '女', color: '#1E293B' }, { text: '保密', color: '#1E293B' }]
+    }).then((res) => {
+      const opts: GenderType[] = ['男', '女', '保密'];
+      if (res.index >= 0 && res.index < 3) this.gender = opts[res.index];
     });
   }
 }

@@ -35,6 +35,7 @@ export class ApiUser {
   countriesCount: number = 0;
   postsCount: number = 0;
   createdAt: string = '';
+  updatedAt: string = '';
 }
 
 export class PostAuthorInfo {

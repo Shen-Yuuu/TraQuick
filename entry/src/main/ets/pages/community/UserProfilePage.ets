@@ -1,12 +1,11 @@
 /**
- * 用户主页 - 增强版
- * 支持区分"自己/他人"，帖子点击跳转详情，视差背景头图
+ * 用户主页 - 对接真实 API
  */
 
 import { router } from '@kit.ArkUI';
-import { Post } from '../../models/Post';
+import { ApiService, ApiPost, UserProfileData, FollowResult, PaginatedPosts } from '../../services/ApiService';
+import { Post, PostAuthor, PostLocation } from '../../models/Post';
 import { User } from '../../models/User';
-import { mockUsers, mockPosts } from '../../services/MockData';
 
 @Entry
 @Component
@@ -20,7 +19,8 @@ struct UserProfilePage {
   @State showMoreMenu: boolean = false;
   @State scrollY: number = 0;
   @State isSelf: boolean = false;
-  @StorageProp('currentUserId') currentUserId: string = 'user_self';
+  @State isLoading: boolean = true;
+  @StorageProp('currentUserId') currentUserId: string = '';
   private userId: string = '';
 
   aboutToAppear(): void {
@@ -28,75 +28,133 @@ struct UserProfilePage {
     if (params && params.userId) {
       this.userId = params.userId;
     } else {
-      // 如果没传 userId，默认当做自己的主页
       this.userId = this.currentUserId;
     }
+
+    // 如果没有 userId 且没有 currentUserId，可能是异常状态
+    if (!this.userId) {
+      router.back();
+      return;
+    }
+
     this.isSelf = (this.userId === this.currentUserId);
     this.loadUserProfile();
   }
 
-  private loadUserProfile(): void {
-    this.user = mockUsers.find(u => u.id === this.userId) || {
-      id: this.userId,
-      nickname: this.isSelf ? '我' : '用户',
-      avatar: '',
-      bio: this.isSelf ? '记录每一次旅途中的美好瞬间 ✨' : '这个人很懒，什么都没写~',
-      level: this.isSelf ? 5 : 1,
-      levelTitle: this.isSelf ? '星辰旅者' : '迷雾行者',
-      followingCount: this.isSelf ? 128 : 0,
-      followersCount: this.isSelf ? 2560 : 0,
-      friendsCount: this.isSelf ? 36 : 0,
-      citiesCount: this.isSelf ? 24 : 0,
-      countriesCount: this.isSelf ? 8 : 0,
-      postsCount: this.isSelf ? 67 : 0,
-      createdAt: '',
-      updatedAt: '',
-    };
+  private async loadUserProfile(): Promise<void> {
+    this.isLoading = true;
+    try {
+      // 1. 获取用户详情
+      const userData: UserProfileData = await ApiService.getUserProfile(this.userId);
 
-    this.userPosts = mockPosts.filter(p => p.author.id === this.userId);
-    if (this.userPosts.length === 0) {
-      this.userPosts = mockPosts.slice(0, 3);
-    }
+      this.user = {
+        id: userData.profile.id,
+        nickname: userData.profile.nickname,
+        avatar: userData.profile.avatar,
+        bio: userData.profile.bio,
+        level: userData.profile.level,
+        levelTitle: userData.profile.levelTitle,
+        followingCount: userData.profile.followingCount,
+        followersCount: userData.profile.followersCount,
+        friendsCount: userData.profile.friendsCount,
+        citiesCount: userData.profile.citiesCount,
+        countriesCount: userData.profile.countriesCount,
+        postsCount: userData.profile.postsCount,
+        createdAt: userData.profile.createdAt,
+        updatedAt: userData.profile.createdAt,
+      };
 
-    // 模拟"喜欢"的帖子
-    this.likedPosts = mockPosts.filter(p => p.isLiked);
-    if (this.likedPosts.length === 0) {
-      this.likedPosts = mockPosts.slice(1, 4);
+      if (userData.relation) {
+        this.isFollowing = userData.relation.isFollowing;
+      }
+
+      // 2. 获取用户帖子列表
+      const postsData: PaginatedPosts = await ApiService.getPosts(1, 20, 'latest', this.userId);
+      const newPosts = postsData.items.map(apiPost => this.convertApiPost(apiPost));
+
+      this.userPosts.splice(0, this.userPosts.length);
+      for (const p of newPosts) {
+        this.userPosts.push(p);
+      }
+
+      this.likedPosts = [];
+
+    } catch (error) {
+      const err = error as Error;
+      console.error('[UserProfile] 加载失败:', err.message);
+    } finally {
+      this.isLoading = false;
     }
   }
 
-  private toggleFollow(): void {
-    this.isFollowing = !this.isFollowing;
-    if (this.user) {
-      // 模拟粉丝数变化
-      let newFollowerCount = this.user.followersCount;
-      if (this.isFollowing) {
-        newFollowerCount += 1;
+  private async toggleFollow(): Promise<void> {
+    if (!this.user) return;
+
+    const wasFollowing = this.isFollowing;
+    const originalFollowers = this.user.followersCount;
+
+    // 乐观更新
+    this.isFollowing = !wasFollowing;
+    this.user.followersCount = Math.max(0, originalFollowers + (this.isFollowing ? 1 : -1));
+
+    try {
+      let result: FollowResult;
+      if (wasFollowing) {
+        result = await ApiService.unfollowUser(this.userId);
       } else {
-        newFollowerCount = Math.max(0, newFollowerCount - 1);
+        result = await ApiService.followUser(this.userId);
       }
+      this.isFollowing = result.isFollowing;
 
-      const newUser: User = {
-        id: this.user.id,
-        nickname: this.user.nickname,
-        avatar: this.user.avatar,
-        bio: this.user.bio,
-        level: this.user.level,
-        levelTitle: this.user.levelTitle,
-        followingCount: this.user.followingCount,
-        followersCount: newFollowerCount, // 更新这个值
-        friendsCount: this.user.friendsCount,
-        citiesCount: this.user.citiesCount,
-        countriesCount: this.user.countriesCount,
-        postsCount: this.user.postsCount,
-        createdAt: this.user.createdAt,
-        updatedAt: this.user.updatedAt,
-        email: this.user.email,
-        phone: this.user.phone
-      };
+      // 重新拉取一次最新计数以防偏差
+      const userData = await ApiService.getUserProfile(this.userId);
+      this.user.followersCount = userData.profile.followersCount;
 
-      this.user = newUser;
+    } catch (error) {
+      // 回滚
+      this.isFollowing = wasFollowing;
+      this.user.followersCount = originalFollowers;
+      const err = error as Error;
+      console.error('[UserProfile] 关注失败:', err.message);
     }
+  }
+
+  private convertApiPost(apiPost: ApiPost): Post {
+    const author: PostAuthor = {
+      id: apiPost.author.id,
+      nickname: apiPost.author.nickname,
+      avatar: apiPost.author.avatar,
+      level: apiPost.author.level,
+      levelTitle: apiPost.author.levelTitle,
+    };
+
+    const post: Post = {
+      id: apiPost.id,
+      author: author,
+      content: apiPost.content,
+      images: apiPost.images,
+      tags: apiPost.tags,
+      likeCount: apiPost.likeCount,
+      commentCount: apiPost.commentCount,
+      shareCount: apiPost.shareCount,
+      collectCount: apiPost.collectCount,
+      isLiked: apiPost.isLiked,
+      isCollected: apiPost.isCollected,
+      createdAt: apiPost.createdAt,
+      type: apiPost.type as 'image' | 'video',
+    };
+
+    if (apiPost.video) post.video = apiPost.video;
+    if (apiPost.city) {
+      post.location = {
+        cityId: apiPost.city.id,
+        cityName: apiPost.city.name,
+        address: apiPost.address,
+        latitude: apiPost.latitude,
+        longitude: apiPost.longitude,
+      };
+    }
+    return post;
   }
 
   private toggleBlock(): void {
@@ -122,8 +180,7 @@ struct UserProfilePage {
   }
 
   private navigateToEditProfile(): void {
-    console.info('[UserProfile] 跳转编辑资料页');
-    // TODO: router.pushUrl({ url: 'pages/profile/EditProfilePage' });
+    router.pushUrl({ url: 'pages/profile/EditProfilePage' });
   }
 
   private navigateToSettings(): void {
@@ -152,16 +209,9 @@ struct UserProfilePage {
       Column() {
         Scroll() {
           Column() {
-            // 视差背景封面 + 用户信息
             this.CoverAndInfo()
-
-            // 操作按钮（根据身份切换）
             this.ActionButtons()
-
-            // Tab 栏
             this.ContentTabs()
-
-            // 作品/喜欢网格
             this.PostsGrid()
           }
           .width('100%')
@@ -178,10 +228,8 @@ struct UserProfilePage {
       .height('100%')
       .backgroundColor('#F8FAFC')
 
-      // 顶部导航栏（滚动时渐变显示）
       this.TopNavBar()
 
-      // 更多菜单弹窗
       if (this.showMoreMenu) {
         this.MoreMenuOverlay()
       }
@@ -192,7 +240,6 @@ struct UserProfilePage {
 
   @Builder
   TopNavBar() {
-    // 滚动时导航栏背景渐显
     Row() {
       Row() {
         Text('←')
@@ -209,7 +256,6 @@ struct UserProfilePage {
 
       Blank()
 
-      // 滚动后显示用户名
       if (this.scrollY > 120) {
         Text(this.user?.nickname || '')
           .fontSize(16)
@@ -247,9 +293,7 @@ struct UserProfilePage {
   @Builder
   CoverAndInfo() {
     Column() {
-      // 视差背景封面
       Stack() {
-        // 主渐变背景
         Column()
           .width('100%')
           .height('100%')
@@ -260,7 +304,6 @@ struct UserProfilePage {
               : [['#1E293B', 0], ['#334155', 0.5], ['#64748B', 1]]
           })
 
-        // 装饰光效1 - 大圆
         Column()
           .width(200)
           .height(200)
@@ -269,9 +312,8 @@ struct UserProfilePage {
           .opacity(0.15)
           .blur(60)
           .position({ x: '60%', y: 10 })
-          .translate({ y: -this.scrollY * 0.3 }) // 视差效果
+          .translate({ y: -this.scrollY * 0.3 })
 
-        // 装饰光效2 - 小圆
         Column()
           .width(140)
           .height(140)
@@ -280,9 +322,8 @@ struct UserProfilePage {
           .opacity(0.12)
           .blur(50)
           .position({ x: '5%', y: 50 })
-          .translate({ y: -this.scrollY * 0.2 }) // 视差效果
+          .translate({ y: -this.scrollY * 0.2 })
 
-        // 装饰光效3 - 右下角小点
         Column()
           .width(80)
           .height(80)
@@ -293,25 +334,18 @@ struct UserProfilePage {
           .position({ x: '80%', y: 120 })
           .translate({ y: -this.scrollY * 0.15 })
 
-        // 网格装饰线（模拟地图经纬线）
         Column()
           .width('100%')
           .height('100%')
           .opacity(0.05)
-          .border({
-            width: 1,
-            color: '#FFFFFF'
-          })
+          .border({ width: 1, color: '#FFFFFF' })
       }
       .width('100%')
       .height(220)
       .clip(true)
 
-      // 用户信息区
       Column() {
-        // 头像
         Stack() {
-          // 外圈光环
           Column()
             .width(92)
             .height(92)
@@ -323,7 +357,6 @@ struct UserProfilePage {
                 : [['#64748B', 0], ['#94A3B8', 1]]
             })
 
-          // 头像主体
           Column() {
             Text((this.user?.nickname || 'U').charAt(0))
               .fontSize(32)
@@ -337,7 +370,6 @@ struct UserProfilePage {
           .border({ width: 3, color: '#FFFFFF' })
           .justifyContent(FlexAlign.Center)
 
-          // 等级徽章
           Row() {
             Text(`LV.${this.user?.level || 1}`)
               .fontSize(9)
@@ -350,7 +382,6 @@ struct UserProfilePage {
           .border({ width: 2, color: '#FFFFFF' })
           .position({ x: 58, y: 72 })
 
-          // 自己主页 - 头像右下角相机图标
           if (this.isSelf) {
             Column() {
               Text('📷')
@@ -372,7 +403,6 @@ struct UserProfilePage {
         .height(92)
         .margin({ top: -46 })
 
-        // 昵称
         Row() {
           Text(this.user?.nickname || '用户')
             .fontSize(22)
@@ -388,7 +418,6 @@ struct UserProfilePage {
         }
         .margin({ top: 12 })
 
-        // 称号标签
         Row() {
           Text('🌍')
             .fontSize(12)
@@ -403,7 +432,6 @@ struct UserProfilePage {
         .borderRadius(12)
         .margin({ top: 8 })
 
-        // 简介
         Text(this.user?.bio || '这个人很懒，什么都没写~')
           .fontSize(14)
           .fontColor('#64748B')
@@ -413,7 +441,6 @@ struct UserProfilePage {
           .margin({ top: 10 })
           .padding({ left: 32, right: 32 })
 
-        // 统计数据
         Row() {
           this.StatColumn(this.formatCount(this.user?.followingCount || 0), '关注')
           Column().width(1).height(24).backgroundColor('#E2E8F0')
@@ -452,7 +479,6 @@ struct UserProfilePage {
   @Builder
   ActionButtons() {
     if (this.isSelf) {
-      // 自己的主页 - 编辑资料 + 设置
       Row({ space: 12 }) {
         Button() {
           Row() {
@@ -491,7 +517,6 @@ struct UserProfilePage {
       .width('100%')
       .padding({ left: 20, right: 20, bottom: 16 })
     } else {
-      // 别人的主页 - 关注 + 私信
       Row({ space: 12 }) {
         Button() {
           Row() {
@@ -585,7 +610,6 @@ struct UserProfilePage {
   PostsGrid() {
     Column() {
       if (this.currentTab === 2) {
-        // 收藏 Tab - 空状态
         Column() {
           Text('⭐')
             .fontSize(48)
@@ -601,9 +625,12 @@ struct UserProfilePage {
         .width('100%')
         .padding({ top: 60 })
         .alignItems(HorizontalAlign.Center)
-      } else {
-        // 作品 / 喜欢 Tab
-        this.PostGridContent(this.getCurrentPosts())
+      } else if (this.currentTab === 0) {
+        // 直接传递 @State 变量 userPosts，保证绝对的响应式
+        this.PostGridContent(this.userPosts, '暂无作品')
+      } else if (this.currentTab === 1) {
+        // 直接传递 @State 变量 likedPosts
+        this.PostGridContent(this.likedPosts, '暂无喜欢的内容')
       }
     }
     .width('100%')
@@ -611,15 +638,16 @@ struct UserProfilePage {
   }
 
   @Builder
-  PostGridContent(posts: Post[]) {
+  PostGridContent(posts: Post[], emptyText: string) {
     if (posts.length === 0) {
       Column() {
         Text('📭')
           .fontSize(48)
-        Text(this.currentTab === 0 ? '暂无作品' : '暂无喜欢的内容')
+        Text(emptyText)
           .fontSize(14)
           .fontColor('#94A3B8')
           .margin({ top: 12 })
+
         if (this.isSelf && this.currentTab === 0) {
           Button('去发布第一条动态')
             .fontSize(14)
@@ -629,10 +657,7 @@ struct UserProfilePage {
             .height(36)
             .margin({ top: 16 })
             .onClick(() => {
-              router.pushUrl({ url: 'pages/publish/PublishPostPage' })
-                .catch((err: Error) => {
-                  console.error(`跳转失败: ${err.message}`);
-                });
+              router.pushUrl({ url: 'pages/publish/PublishPostPage' });
             })
         }
       }
@@ -643,7 +668,6 @@ struct UserProfilePage {
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach(posts, (post: Post, index: number) => {
           Stack() {
-            // 渐变背景（模拟封面图）
             Column()
               .width('100%')
               .aspectRatio(1)
@@ -655,7 +679,6 @@ struct UserProfilePage {
                 ]
               })
 
-            // 帖子内容预览（左下角）
             Column() {
               Text(post.content)
                 .fontSize(10)
@@ -667,9 +690,7 @@ struct UserProfilePage {
             .padding({ left: 6, right: 6, bottom: 24 })
             .position({ x: 0, y: '55%' })
 
-            // 底部信息栏
             Row() {
-              // 图片数量标记
               if (post.images.length > 1) {
                 Row() {
                   Text('🖼️')
@@ -687,7 +708,6 @@ struct UserProfilePage {
 
               Blank()
 
-              // 点赞数
               Row() {
                 Text('❤️')
                   .fontSize(8)
@@ -719,7 +739,6 @@ struct UserProfilePage {
   @Builder
   MoreMenuOverlay() {
     Stack() {
-      // 遮罩
       Column()
         .width('100%')
         .height('100%')
@@ -728,7 +747,6 @@ struct UserProfilePage {
           this.showMoreMenu = false;
         })
 
-      // 菜单面板
       Column() {
         Column() {
           this.MenuItem('⚠️', this.isBlocked ? '取消拉黑' : '拉黑该用户',
@@ -747,7 +765,6 @@ struct UserProfilePage {
         .backgroundColor('#FFFFFF')
         .borderRadius(16)
 
-        // 取消按钮
         Column() {
           Text('取消')
             .fontSize(16)
