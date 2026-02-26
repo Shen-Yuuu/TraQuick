@@ -28,3 +28,6 @@ oh-package-lock.json5
 
 # UI设计稿
 /界面UI设计/
+
+.github
+skills-lock.json
