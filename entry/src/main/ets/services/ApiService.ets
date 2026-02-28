@@ -3,8 +3,7 @@
  */
 import { http } from '@kit.NetworkKit';
 
-// ⚠️ 改成你电脑的局域网 IP
-const BASE_URL: string = 'http://172.19.0.1:3000/api';
+const BASE_URL: string = 'http://192.168.137.1:3000/api';
 
 // ==================== 数据结构定义（全部用 class） ====================
 
@@ -139,6 +138,108 @@ export class MessageResult {
 export class UserListData {
   items: ApiUser[] = [];
   total: number = 0;
+}
+
+// ------ Message 相关 ------
+export class MessageRelatedUser {
+  id: string = '';
+  nickname: string = '';
+  avatar: string = '';
+}
+
+export class MessageRelatedPost {
+  id: string = '';
+  content: string = '';
+}
+
+export class ApiMessage {
+  id: string = '';
+  type: string = 'system';
+  title: string = '';
+  content: string = '';
+  isRead: boolean = false;
+  createdAt: string = '';
+  relatedUser: MessageRelatedUser | null = null;
+  relatedPost: MessageRelatedPost | null = null;
+}
+
+export class MessageListData {
+  items: ApiMessage[] = [];
+  total: number = 0;
+  unreadTotal: number = 0;
+}
+
+export class ApiMessageGroup {
+  type: string = '';
+  unreadCount: number = 0;
+  latestMessage: ApiMessage | null = null;
+}
+
+export class MarkReadResult {
+  count: number = 0;
+}
+
+// ------ City 相关 ------
+export class ApiCity {
+  id: string = '';
+  name: string = '';
+  nameEn: string | null = null;
+  country: string = '';
+  countryCode: string = '';
+  province: string | null = null;
+  coverImage: string = '';
+  latitude: number = 0;
+  longitude: number = 0;
+  description: string | null = null;
+  postsCount: number = 0;
+  visitorsCount: number = 0;
+  isUnlocked: boolean = false;
+}
+
+export class ApiCityMarker {
+  id: string = '';
+  name: string = '';
+  latitude: number = 0;
+  longitude: number = 0;
+  isUnlocked: boolean = false;
+  hasContent: boolean = false;
+  type: string = 'normal';
+}
+
+// ------ DriftBottle (漂流瓶) 相关 ------
+export class ApiDriftBottle {
+  id: string = '';
+  content: string = '';
+  type: string = 'wish'; // 'wish' | 'story' | 'question'
+  senderNickname: string = '';
+  senderCity: string | null = null;
+  createdAt: string = '';
+}
+
+export class CreateBottleParams {
+  content: string = '';
+  type: string = 'wish';
+  cityId?: string = '';
+}
+
+// ------ TimeCapsule (时空胶囊) 相关 ------
+export class ApiTimeCapsule {
+  id: string = '';
+  content: string = '';
+  images: string[] = [];
+  targetDate: string = '';
+  cityName: string | null = null;
+  address: string | null = null;
+  status: string = 'locked'; // 'locked' | 'unlocked'
+  createdAt: string = '';
+}
+
+export class CreateCapsuleParams {
+  content: string = '';
+  images?: string[] = [];
+  targetDate: string = '';
+  cityName?: string = '';
+  address?: string = '';
 }
 
 // ==================== 请求参数类 ====================
@@ -386,12 +487,22 @@ class ApiServiceClass {
     return await this.post<ApiPost>('/posts', params, true);
   }
 
-  async getPosts(page: number = 1, limit: number = 20, orderBy: string = 'latest',
-    authorId: string = '', cityId: string = '', tag: string = ''): Promise<PaginatedPosts> {
+  async getPosts(
+    page: number = 1,
+    limit: number = 20,
+    orderBy: string = 'latest',
+    authorId: string = '',
+    cityId: string = '',
+    tag: string = '',
+    likedBy: string = '',
+    collectedBy: string = ''
+  ): Promise<PaginatedPosts> {
     let query = `?page=${page}&limit=${limit}&orderBy=${orderBy}`;
     if (authorId) query += `&authorId=${authorId}`;
     if (cityId) query += `&cityId=${cityId}`;
     if (tag) query += `&tag=${tag}`;
+    if (likedBy) query += `&likedBy=${likedBy}`;
+    if (collectedBy) query += `&likedBy=${collectedBy}`;
 
     return await this.get<PaginatedPosts>(`/posts${query}`, true);
   }
@@ -478,6 +589,38 @@ class ApiServiceClass {
   // City 接口
   // ============================================================
 
+  /**
+   * 获取所有城市列表（探索页随机抽选用）或根据关键字搜索
+   */
+  async getCities(keyword: string = ''): Promise<ApiCity[]> {
+    const query = keyword ? `?keyword=${keyword}` : '';
+    return await this.get<ApiCity[]>(`/cities${query}`, true);
+  }
+
+  /**
+   * 获取地图标记点数据
+   */
+  async getCityMarkers(): Promise<ApiCityMarker[]> {
+    return await this.get<ApiCityMarker[]>('/cities/markers', true);
+  }
+
+  /**
+   * 获取当前用户已点亮的城市
+   */
+  async getMyCities(): Promise<ApiCity[]> {
+    return await this.get<ApiCity[]>('/cities/my', true);
+  }
+
+  /**
+   * 获取城市详情
+   */
+  async getCityDetail(cityId: string): Promise<ApiCity> {
+    return await this.get<ApiCity>(`/cities/${cityId}`, true);
+  }
+
+  /**
+   * 签到打卡（点亮城市）
+   */
   async checkInCity(cityId: string): Promise<MessageResult> {
     return await this.post<MessageResult>(`/cities/${cityId}/check-in`, undefined, true);
   }
@@ -486,10 +629,102 @@ class ApiServiceClass {
   // Message 接口
   // ============================================================
 
-  async markAllRead(type: string = ''): Promise<object> {
-    const query = type ? `?type=${type}` : '';
-    return await this.put<object>(`/messages/read-all${query}`, undefined, true);
+  /**
+   * 获取我的消息列表
+   */
+  async getMessages(type: string = '', page: number = 1): Promise<MessageListData> {
+    let query = `?page=${page}`;
+    if (type) query += `&type=${type}`;
+    return await this.get<MessageListData>(`/messages${query}`, true);
   }
+
+  /**
+   * 获取消息分组概览
+   */
+  async getMessageGroups(): Promise<ApiMessageGroup[]> {
+    return await this.get<ApiMessageGroup[]>('/messages/groups', true);
+  }
+
+  /**
+   * 标记单条消息为已读
+   */
+  async markAsRead(messageId: string): Promise<MessageResult> {
+    return await this.put<MessageResult>(`/messages/${messageId}/read`, undefined, true);
+  }
+
+  /**
+   * 全部标记为已读
+   */
+  async markAllRead(type: string = ''): Promise<MarkReadResult> {
+    const query = type ? `?type=${type}` : '';
+    return await this.put<MarkReadResult>(`/messages/read-all${query}`, undefined, true);
+  }
+
+  // ============================================================
+  // DriftBottle 接口
+  // ============================================================
+
+  /**
+   * 投放漂流瓶
+   */
+  async createBottle(params: CreateBottleParams): Promise<ApiDriftBottle> {
+
+    const body: Record<string, string> = {};
+    body['content'] = params.content;
+    body['type'] = params.type;
+
+    if (params.cityId && params.cityId.length > 0) {
+      body['cityId'] = params.cityId;
+    }
+
+    return await this.post<ApiDriftBottle>('/bottles', body, true);
+  }
+  /**
+   * 随机捡一个瓶子
+   */
+  async pickBottle(): Promise<ApiDriftBottle> {
+    return await this.post<ApiDriftBottle>('/bottles/pick', undefined, true);
+  }
+
+  /**
+   * 获取我投放的瓶子
+   */
+  async getMySentBottles(): Promise<ApiDriftBottle[]> {
+    return await this.get<ApiDriftBottle[]>('/bottles/sent', true);
+  }
+
+  /**
+   * 获取我捡到的瓶子
+   */
+  async getMyPickedBottles(): Promise<ApiDriftBottle[]> {
+    return await this.get<ApiDriftBottle[]>('/bottles/picked', true);
+  }
+
+  // ============================================================
+  // TimeCapsule 接口
+  // ============================================================
+
+  /**
+   * 创建时空胶囊
+   */
+  async createCapsule(params: CreateCapsuleParams): Promise<ApiTimeCapsule> {
+    return await this.post<ApiTimeCapsule>('/capsules', params, true);
+  }
+
+  /**
+   * 获取我的所有胶囊
+   */
+  async getMyCapsules(): Promise<ApiTimeCapsule[]> {
+    return await this.get<ApiTimeCapsule[]>('/capsules', true);
+  }
+
+  /**
+   * 删除胶囊
+   */
+  async deleteCapsule(capsuleId: string): Promise<MessageResult> {
+    return await this.del<MessageResult>(`/capsules/${capsuleId}`, true);
+  }
+
 }
 
 // 导出单例
