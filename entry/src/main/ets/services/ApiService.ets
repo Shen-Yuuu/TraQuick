@@ -495,7 +495,8 @@ class ApiServiceClass {
     cityId: string = '',
     tag: string = '',
     likedBy: string = '',
-    collectedBy: string = ''
+    collectedBy: string = '',
+    feedType: string = ''
   ): Promise<PaginatedPosts> {
     let query = `?page=${page}&limit=${limit}&orderBy=${orderBy}`;
     if (authorId) query += `&authorId=${authorId}`;
@@ -503,6 +504,7 @@ class ApiServiceClass {
     if (tag) query += `&tag=${tag}`;
     if (likedBy) query += `&likedBy=${likedBy}`;
     if (collectedBy) query += `&collectedBy=${collectedBy}`;
+    if (feedType) query += `&feedType=${feedType}`;
 
     return await this.get<PaginatedPosts>(`/posts${query}`, true);
   }

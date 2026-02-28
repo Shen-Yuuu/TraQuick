@@ -126,7 +126,15 @@ export struct CommunityPage {
 
     try {
       const orderBy = this.currentSubTab === 0 ? 'latest' : 'hot';
-      const result: PaginatedPosts = await ApiService.getPosts(this.currentPage, 20, orderBy);
+
+      let feedType = '';
+      if (this.currentSubTab === 1) {
+        feedType = 'following'; // 关注栏
+      } else if (this.currentSubTab === 2) {
+        feedType = 'friends';   // 朋友栏
+      }
+
+      const result: PaginatedPosts = await ApiService.getPosts(this.currentPage, 20, orderBy,'', '', '', '', '', feedType);
 
       const newPosts: Post[] = [];
       for (const apiPost of result.items) {
