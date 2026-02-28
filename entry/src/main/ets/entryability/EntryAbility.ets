@@ -3,24 +3,40 @@ import { window } from '@kit.ArkUI';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    // 初始化 AppStorage 默认值
-    // PersistentStorage 在 ArkTS 中通过 AppStorage 配合 @StorageProp 使用
     AppStorage.setOrCreate('userToken', '');
     AppStorage.setOrCreate('currentUserId', '');
     AppStorage.setOrCreate('currentUserNickname', '');
     AppStorage.setOrCreate('currentUserAvatar', '');
     AppStorage.setOrCreate('currentUserEmail', '');
     AppStorage.setOrCreate('isLoggedIn', false);
-
-    console.info('[EntryAbility] AppStorage 初始化完成');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    // 根据登录状态决定首页
+    // 1. 开启全屏沉浸式布局
+    windowStage.getMainWindow((err, windowClass) => {
+      if (err.code) {
+        console.error('Failed to obtain the main window.', err);
+        return;
+      }
+
+      windowClass.setWindowLayoutFullScreen(true, (err) => {
+        if (err.code) {
+          console.error('Failed to set the window layout to full-screen mode.', err);
+          return;
+        }
+        console.info('Succeeded in setting the window layout to full-screen mode.');
+      });
+
+      windowClass.setWindowSystemBarProperties({
+        statusBarContentColor: '#000000', // 状态栏文字黑色
+        navigationBarContentColor: '#000000'
+      });
+    });
+
     const isLoggedIn = AppStorage.get<boolean>('isLoggedIn') || false;
     const token = AppStorage.get<string>('userToken') || '';
-
     let startPage: string;
+
     if (isLoggedIn && token) {
       startPage = 'pages/Index';
     } else {
@@ -28,11 +44,7 @@ export default class EntryAbility extends UIAbility {
     }
 
     windowStage.loadContent(startPage, (err) => {
-      if (err) {
-        console.error(`[EntryAbility] 加载页面失败: ${JSON.stringify(err)}`);
-        return;
-      }
-      console.info(`[EntryAbility] 加载页面: ${startPage}`);
+      if (err) return;
     });
   }
 }

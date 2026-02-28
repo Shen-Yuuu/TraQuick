@@ -130,12 +130,8 @@ export struct ProfilePage {
       this.likedPosts = tempLikedPosts;
 
       // 4. 获取我收藏的帖子
-      const collectedPostsData: PaginatedPosts = await ApiService.getPosts(1, 50, 'latest', '', '', '', this.currentUserId);
-      const tempCollectedPosts: Post[] = [];
-      for (const apiPost of collectedPostsData.items) {
-        tempCollectedPosts.push(this.convertApiPost(apiPost));
-      }
-      this.collectedPosts = tempCollectedPosts;
+      const collectData: PaginatedPosts = await ApiService.getPosts(1, 50, 'latest', '', '', '', '', this.currentUserId);
+      this.collectedPosts = collectData.items.map(p => this.convertApiPost(p));
 
     } catch (error) {
       console.error('[Profile] 加载个人信息失败:', (error as Error).message);
@@ -505,32 +501,20 @@ export struct ProfilePage {
   PhotoGrid() {
     Column() {
       if (this.isLoading) {
-        // 数据还在请求时，显示加载中，防止提前渲染空状态
-        Column() {
-          LoadingProgress().width(40).height(40).color('#38BDF8')
-        }.width('100%').padding({ top: 60, bottom: 60 }).justifyContent(FlexAlign.Center)
+        Column() { LoadingProgress().width(40).height(40).color('#38BDF8') }
+        .width('100%').padding({ top: 60, bottom: 60 }).justifyContent(FlexAlign.Center)
       } else if (this.currentTab === 0) {
-        // 直接读取 this.myPosts
-        if (this.myPosts.length === 0) {
-          this.EmptyStateView('📭', '暂无作品')
-        } else {
-          this.RenderPostGrid(this.myPosts)
-        }
+        if (this.myPosts.length === 0) this.EmptyStateView('📭', '暂无作品')
+        else this.RenderPostGrid(this.myPosts)
       } else if (this.currentTab === 1) {
-        // 直接读取 this.likedPosts
-        if (this.likedPosts.length === 0) {
-          this.EmptyStateView('⭐', '暂无喜欢的内容')
-        } else {
-          this.RenderPostGrid(this.likedPosts)
-        }
-      } else {
-        Column() {
-          Text('开发中...').fontSize(14).fontColor('#94A3B8')
-        }.width('100%').padding({ top: 60, bottom: 60 }).alignItems(HorizontalAlign.Center)
+        if (this.likedPosts.length === 0) this.EmptyStateView('⭐', '暂无喜欢的内容')
+        else this.RenderPostGrid(this.likedPosts)
+      } else if (this.currentTab === 2) {
+        if (this.collectedPosts.length === 0) this.EmptyStateView('📂', '暂无收藏的内容')
+        else this.RenderPostGrid(this.collectedPosts)
       }
     }
-    .width('100%')
-    .padding(1)
+    .width('100%').padding(1)
   }
 
   @Builder

@@ -150,7 +150,7 @@ struct Index {
       .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.6)' })
       .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.08)', offsetY: 4 })
       .position({ x: '6%', y: '100%' })
-      .translate({ y: -45 })
+      .translate({ y: -75 })
 
       // 发布选择弹窗
       PublishSelectDialog({

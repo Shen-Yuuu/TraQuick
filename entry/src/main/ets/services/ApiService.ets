@@ -502,7 +502,7 @@ class ApiServiceClass {
     if (cityId) query += `&cityId=${cityId}`;
     if (tag) query += `&tag=${tag}`;
     if (likedBy) query += `&likedBy=${likedBy}`;
-    if (collectedBy) query += `&likedBy=${collectedBy}`;
+    if (collectedBy) query += `&collectedBy=${collectedBy}`;
 
     return await this.get<PaginatedPosts>(`/posts${query}`, true);
   }

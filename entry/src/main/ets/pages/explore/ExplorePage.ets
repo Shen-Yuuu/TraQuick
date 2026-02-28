@@ -364,7 +364,7 @@ export struct ExplorePage {
         .borderRadius(25).border({ width: 0.5, color: 'rgba(255,255,255,0.18)' }).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).shadow({ radius: 12, color: 'rgba(0,0,0,0.12)', offsetY: 4 })
         Text('漂流瓶').fontSize(10).fontColor('rgba(255,255,255,0.6)').margin({ top: 4 })
       }
-      .alignItems(HorizontalAlign.Center).position({ x: 20, y: '100%' }).translate({ y: -120 })
+      .alignItems(HorizontalAlign.Center).position({ x: 20, y: '100%' }).translate({ y: -150 })
       .onClick(() => { this.onDriftBottleClick(); })
 
       Column() {
@@ -373,7 +373,7 @@ export struct ExplorePage {
         .borderRadius(25).border({ width: 0.5, color: 'rgba(255,255,255,0.18)' }).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).shadow({ radius: 12, color: 'rgba(0,0,0,0.12)', offsetY: 4 })
         Text('胶囊').fontSize(10).fontColor('rgba(255,255,255,0.6)').margin({ top: 4 })
       }
-      .alignItems(HorizontalAlign.Center).position({ x: '100%', y: '100%' }).translate({ x: -70, y: -120 })
+      .alignItems(HorizontalAlign.Center).position({ x: '100%', y: '100%' }).translate({ x: -70, y: -150 })
       .onClick(() => { this.onTimeCapsuleClick(); })
     }
     .width('100%').height('100%').hitTestBehavior(HitTestMode.Transparent)

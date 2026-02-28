@@ -264,8 +264,7 @@ struct MessageListPage {
         })
       }
       .width('100%')
-      .height(56)
-      .padding({ left: 8, right: 8, top: 40 }) // 适配状态栏
+      .padding({ left: 8, right: 8, top: 44, bottom: 12 }) // 适配状态栏
       .backgroundColor('#FFFFFF')
       .border({ width: { bottom: 0.5 }, color: '#F1F5F9' })
 
@@ -347,6 +346,7 @@ struct MessageListPage {
     .width('100%')
     .height('100%')
     .backgroundColor('#F8FAFC')
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder

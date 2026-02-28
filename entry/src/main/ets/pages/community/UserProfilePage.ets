@@ -72,14 +72,21 @@ struct UserProfilePage {
 
       // 2. 获取用户帖子列表
       const postsData: PaginatedPosts = await ApiService.getPosts(1, 20, 'latest', this.userId);
+      this.userPosts = postsData.items.map(p => this.convertApiPost(p));
 
-      const newPosts: Post[] = [];
-      for (const apiPost of postsData.items) {
-        newPosts.push(this.convertApiPost(apiPost));
+      try {
+        const likedData: PaginatedPosts = await ApiService.getPosts(1, 20, 'latest', '', '', '', this.userId);
+
+        const tempLiked: Post[] = [];
+        for (const p of likedData.items) {
+          if (p.isLiked) {
+            tempLiked.push(this.convertApiPost(p));
+          }
+        }
+        this.likedPosts = tempLiked;
+      } catch (e) {
+        this.likedPosts = [];
       }
-
-      this.userPosts = newPosts;
-      this.likedPosts = [];
 
     } catch (error) {
       const err = error as Error;

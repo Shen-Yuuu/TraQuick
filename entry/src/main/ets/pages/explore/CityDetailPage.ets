@@ -324,7 +324,7 @@ struct CityDetailPage {
           .layoutWeight(1).alignItems(HorizontalAlign.Center).justifyContent(FlexAlign.Center).height('100%').onClick(() => { this.currentTab = index; })
         })
       }.width('100%').height(50).padding({ left: 4, right: 4 })
-    }.width('88%').backgroundBlurStyle(BlurStyle.Regular).backgroundColor('rgba(255, 255, 255, 0.45)').borderRadius(25).border({ width: 0.5, color: 'rgba(255, 255, 255, 0.6)' }).shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.08)', offsetY: 4 }).position({ x: '6%', y: '100%' }).translate({ y: -45 })
+    }.width('88%').backgroundBlurStyle(BlurStyle.Regular).backgroundColor('rgba(255, 255, 255, 0.45)').borderRadius(25).border({ width: 0.5, color: 'rgba(255, 255, 255, 0.6)' }).shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.08)', offsetY: 4 }).position({ x: '6%', y: '100%' }).translate({ y: -75 })
   }
 
   @Builder CityInfoContent() {
