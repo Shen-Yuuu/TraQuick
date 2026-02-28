@@ -2,6 +2,7 @@
  * 统一 API 请求服务 - ArkTS 严格模式兼容版
  */
 import { http } from '@kit.NetworkKit';
+import { fileIo as fs } from '@kit.CoreFileKit';
 
 const BASE_URL: string = 'http://192.168.137.1:3000/api';
 
@@ -35,6 +36,7 @@ export class ApiUser {
   postsCount: number = 0;
   createdAt: string = '';
   updatedAt: string = '';
+  coverImage: string = '';
 }
 
 export class PostAuthorInfo {
@@ -277,6 +279,7 @@ export class UpdateProfileParams {
   nickname: string = '';
   avatar: string = '';
   bio: string = '';
+  coverImage: string = '';
 }
 
 // ==================== API 请求类 ====================
@@ -479,6 +482,59 @@ class ApiServiceClass {
     return await this.get<ApiUser>('/auth/profile', true);
   }
 
+  // ============================================================
+  // Upload 接口
+  // ============================================================
+  /**
+   * 上传图片到 OSS
+   * 自动处理从相册 URI 拷贝到沙箱再上传的流程
+   */
+  async uploadImage(context: Context, fileUri: string): Promise<string> {
+    try {
+      // 1. 将相册文件拷贝到沙箱 cache 目录
+      const cacheDir = context.cacheDir;
+      const fileName = `upload_${Date.now()}.jpg`;
+      const cacheFilePath = `${cacheDir}/${fileName}`;
+
+      const file = fs.openSync(fileUri, fs.OpenMode.READ_ONLY);
+      fs.copyFileSync(file.fd, cacheFilePath);
+      fs.closeSync(file);
+
+      // 2. 发起 HTTP Multipart 上传
+      const httpRequest = http.createHttp();
+      const url = `${BASE_URL}/upload/image`;
+
+      const header: Record<string, string> = {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${this.getToken()}`
+      };
+
+      const response = await httpRequest.request(url, {
+        method: http.RequestMethod.POST,
+        header: header,
+        multiFormDataList: [
+          {
+            name: 'file',
+            contentType: 'image/jpeg',
+            filePath: cacheFilePath,
+          }
+        ],
+        connectTimeout: 20000,
+        readTimeout: 30000,
+      });
+
+      const result = JSON.parse(response.result as string) as ApiResponse;
+      if (result.code >= 200 && result.code < 300) {
+        // 返回 OSS URL
+        return (result.data as Record<string, string>).url;
+      } else {
+        throw new Error(result.message || '上传失败');
+      }
+    } catch (error) {
+      console.error(`[Upload] 图片上传失败: ${(error as Error).message}`);
+      throw error as Error;
+    }
+  }
   // ============================================================
   // Post 接口
   // ============================================================

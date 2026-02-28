@@ -1,10 +1,12 @@
 ﻿/**
- * 个人中心页面
+ * 个人中心页面 - 真实数据 + 视差下拉 + 头像背景修改
  */
 
 import { router, promptAction } from '@kit.ArkUI';
-import { ApiService, ApiPost, UserProfileData, PaginatedPosts } from '../../services/ApiService';
+import { ApiService, ApiPost, UserProfileData, PaginatedPosts, UpdateProfileParams } from '../../services/ApiService';
 import { Post, PostAuthor, PostLocation } from '../../models/Post';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { common } from '@kit.AbilityKit';
 
 interface BadgeItem {
   icon: string;
@@ -37,11 +39,17 @@ export struct ProfilePage {
   @State countriesCount: number = 0;
   @State citiesCount: number = 0;
   @State postsCount: number = 0;
+  @State coverImage: string = ''; // 用户背景图
 
   @State myPosts: Post[] = [];
   @State likedPosts: Post[] = [];
   @State collectedPosts: Post[] = [];
   @State isLoading: boolean = true;
+
+  // 视差下拉状态
+  @State scrollY: number = 0;
+  @State bgScale: number = 1;
+  private scroller: Scroller = new Scroller();
 
   // 地球状态
   @State isGlobeExpanded: boolean = false;
@@ -55,6 +63,9 @@ export struct ProfilePage {
   private readonly MAX_EXPAND_HEIGHT: number = 320;
   private readonly MIN_HEIGHT: number = 0;
   private currentUserId: string = '';
+
+  // 获取上下文用于图片上传
+  private context = getContext(this) as common.UIAbilityContext;
 
   // 用于手势判定
   private dragStartY: number = 0;
@@ -112,6 +123,7 @@ export struct ProfilePage {
       this.countriesCount = profile.countriesCount;
       this.citiesCount = profile.citiesCount;
       this.postsCount = profile.postsCount;
+      this.coverImage = profile.coverImage || '';
 
       // 2. 获取我发布的帖子 (authorId = currentUserId)
       const myPostsData: PaginatedPosts = await ApiService.getPosts(1, 50, 'latest', this.currentUserId);
@@ -130,8 +142,12 @@ export struct ProfilePage {
       this.likedPosts = tempLikedPosts;
 
       // 4. 获取我收藏的帖子
-      const collectData: PaginatedPosts = await ApiService.getPosts(1, 50, 'latest', '', '', '', '', this.currentUserId);
-      this.collectedPosts = collectData.items.map(p => this.convertApiPost(p));
+      const collectedPostsData: PaginatedPosts = await ApiService.getPosts(1, 50, 'latest', '', '', '', '', this.currentUserId);
+      const tempCollectedPosts: Post[] = [];
+      for (const apiPost of collectedPostsData.items) {
+        tempCollectedPosts.push(this.convertApiPost(apiPost));
+      }
+      this.collectedPosts = tempCollectedPosts;
 
     } catch (error) {
       console.error('[Profile] 加载个人信息失败:', (error as Error).message);
@@ -175,30 +191,52 @@ export struct ProfilePage {
     return post;
   }
 
-  private navigateToSettings(): void { router.pushUrl({ url: 'pages/settings/SettingsPage' }).catch(() => {}); }
+  private navigateToSettings(): void { router.pushUrl({ url: 'pages/profile/SettingsPage' }).catch(() => {}); }
   private navigateToEditProfile(): void { router.pushUrl({ url: 'pages/profile/EditProfilePage' }).catch(() => {}); }
   private navigateToBadgeWall(): void { router.pushUrl({ url: 'pages/profile/BadgeWallPage' }).catch(() => {}); }
   private navigateToPostDetail(post: Post): void { router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: post.id } }).catch(() => {}); }
 
-  private changeCoverBg(): void {
-    promptAction.showActionMenu({
-      title: '更换背景',
-      buttons: [
-        { text: '从相册选择', color: '#1E293B' },
-        { text: '星空蓝(默认)', color: '#1E293B' },
-        { text: '梦幻紫', color: '#1E293B' },
-        { text: '清新绿', color: '#1E293B' },
-        { text: '暖阳金', color: '#1E293B' },
-        { text: '极光青', color: '#1E293B' }
-      ]
-    }).then((result) => {
-      if (result.index >= 1 && result.index <= 5) {
-        this.coverBgIndex = result.index - 1;
+  // 上传并更换主页背景图
+  private async changeCoverImage(): Promise<void> {
+    try {
+      const picker = new photoAccessHelper.PhotoViewPicker();
+      const options = new photoAccessHelper.PhotoSelectOptions();
+      options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+      options.maxSelectNumber = 1;
+
+      const result = await picker.select(options);
+      if (result && result.photoUris && result.photoUris.length > 0) {
+        promptAction.showToast({ message: '正在上传背景图...' });
+        const ossUrl = await ApiService.uploadImage(this.context, result.photoUris[0]);
+
+        // 乐观更新 UI
+        this.coverImage = ossUrl;
+
+        // 保存到后端
+        const params = new UpdateProfileParams();
+        params.coverImage = ossUrl;
+        await ApiService.updateProfile(params);
+
+        promptAction.showToast({ message: '背景更换成功' });
       }
-    });
+    } catch (error) {
+      console.error('[Profile] 更换背景失败:', (error as Error).message);
+      promptAction.showToast({ message: '背景更换失败' });
+    }
   }
 
-  // ==================== 地球手势处理（修复版） ====================
+  // 视差下拉计算
+  private handleScroll(): void {
+    this.scrollY = this.scroller.currentOffset().yOffset;
+    if (this.scrollY < 0) {
+      // 下拉放大：滑动距离 / 系数 (系数越小放大越快)
+      this.bgScale = 1 + Math.abs(this.scrollY) / 300;
+    } else {
+      this.bgScale = 1;
+    }
+  }
+
+  // ==================== 地球手势处理 ====================
 
   private handleGlobeDragStart(offsetY: number): void {
     this.isDragging = true;
@@ -206,18 +244,12 @@ export struct ProfilePage {
   }
 
   private handleGlobeDragUpdate(offsetY: number): void {
-    // 计算本次滑动的相对距离
     const deltaY = offsetY - this.dragStartY;
-
-    // 增加阻尼感，滑动变慢
     const dampedDelta = deltaY * 0.6;
-
     const currentBase = this.isGlobeExpanded ? this.MAX_EXPAND_HEIGHT : this.MIN_HEIGHT;
     let newHeight = currentBase + dampedDelta;
 
-    // 限制在有效高度内
     newHeight = Math.max(this.MIN_HEIGHT, Math.min(this.MAX_EXPAND_HEIGHT, newHeight));
-
     const progress = (newHeight - this.MIN_HEIGHT) / (this.MAX_EXPAND_HEIGHT - this.MIN_HEIGHT);
 
     this.globeHeight = newHeight;
@@ -230,21 +262,13 @@ export struct ProfilePage {
     this.isDragging = false;
     const deltaY = offsetY - this.dragStartY;
 
-    // 如果往下滑动超过 30px，且原本是收起状态 -> 展开
     if (deltaY > 30 && !this.isGlobeExpanded) {
       this.expandGlobe();
-    }
-    // 如果往上滑动超过 30px，且原本是展开状态 -> 收起
-    else if (deltaY < -30 && this.isGlobeExpanded) {
+    } else if (deltaY < -30 && this.isGlobeExpanded) {
       this.collapseGlobe();
-    }
-    // 否则恢复原状
-    else {
-      if (this.isGlobeExpanded) {
-        this.expandGlobe();
-      } else {
-        this.collapseGlobe();
-      }
+    } else {
+      if (this.isGlobeExpanded) this.expandGlobe();
+      else this.collapseGlobe();
     }
   }
 
@@ -274,68 +298,116 @@ export struct ProfilePage {
     return `${count}`;
   }
 
+  // ==================== 主布局 ====================
+
   build() {
     Stack() {
-      Scroll() {
-        Column() {
-          this.CoverSection()
-          this.UserInfoSection()
-          this.StatsRow()
-          this.FogGlobeSection()
-          this.BadgeWallSection()
-          this.ContentTabsSection()
+      // 1. 底层：沉浸式视差背景图
+      if (this.coverImage) {
+        Image(this.coverImage)
+          .width('100%')
+          .height(350)
+          .objectFit(ImageFit.Cover)
+          .scale({ x: this.bgScale, y: this.bgScale })
+          .position({ x: 0, y: 0 })
+      } else {
+        Column()
+          .width('100%')
+          .height(350)
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [
+              [this.coverGradients[this.coverBgIndex][0], 0],
+              [this.coverGradients[this.coverBgIndex][1], 0.4],
+              [this.coverGradients[this.coverBgIndex][2], 0.7],
+              [this.coverGradients[this.coverBgIndex][3], 1]
+            ]
+          })
+          .scale({ x: this.bgScale, y: this.bgScale })
+          .position({ x: 0, y: 0 })
+      }
 
-          Row().height(100)
+      // 2. 上层：滚动内容
+      Scroll(this.scroller) {
+        Column() {
+          // 顶部透明留白（透出背后的图），增加更换背景按钮
+          Column() {
+            Row() {
+              Blank()
+              Row() { Text('📷').fontSize(12); Text('更换背景').fontSize(11).fontColor('#FFFFFF').margin({ left: 4 }) }
+              .padding({ left: 10, right: 10, top: 5, bottom: 5 }).backgroundColor('rgba(0,0,0,0.4)').borderRadius(14)
+              .onClick(() => this.changeCoverImage())
+            }.width('100%').padding({ right: 16, top: 180 })
+          }.width('100%').height(220)
+
+          // 白色圆角主体区域
+          Column() {
+            this.UserInfoSection()
+            this.StatsRow()
+            this.FogGlobeSection()
+            this.BadgeWallSection()
+            this.ContentTabsSection()
+
+            // 底部留白给导航栏
+            Row().height(100)
+          }
+          .width('100%')
+          .backgroundColor('#F8FAFC')
+          .borderRadius({ topLeft: 24, topRight: 24 })
+          .constraintSize({ minHeight: '100%' })
         }
         .width('100%')
       }
       .scrollable(ScrollDirection.Vertical)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
+      .onScroll(() => this.handleScroll())
+      this.TopActionButtons()
     }
     .width('100%')
     .height('100%')
     .backgroundColor('#F8FAFC')
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder
-  CoverSection() {
-    Stack() {
-      Column()
-        .width('100%')
-        .height('100%')
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [
-            [this.coverGradients[this.coverBgIndex][0], 0],
-            [this.coverGradients[this.coverBgIndex][1], 0.4],
-            [this.coverGradients[this.coverBgIndex][2], 0.7],
-            [this.coverGradients[this.coverBgIndex][3], 1]
-          ]
-        })
+  TopActionButtons() {
+    Row() {
+      Blank() // 把按钮推到右边
 
-      Column().width(200).height(200).borderRadius(100).backgroundColor('#7DD3FC').opacity(0.15).blur(80).position({ x: '60%', y: 30 })
-      Column().width(160).height(160).borderRadius(80).backgroundColor('#60A5FA').opacity(0.1).blur(60).position({ x: '10%', y: 80 })
-
-      Row({ space: 10 }) {
-        Column() { Text('+').fontSize(24).fontColor('#FFFFFF') }
-        .width(34).height(34).borderRadius(17).backgroundColor('rgba(255,255,255,0.15)').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-
-        Column() { Text('⚙️').fontSize(18) }
-        .width(34).height(34).borderRadius(17).backgroundColor('rgba(255,255,255,0.15)').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
-        .onClick(() => this.navigateToSettings())
+      // 添加内容按钮
+      Column() {
+        Text('+')
+          .fontSize(24)
+          .fontColor('#FFFFFF')
       }
-      .position({ x: '100%', y: 0 }).translate({ x: -98 }).padding({ top: 40 })
+      .width(36)
+      .height(36)
+      .borderRadius(18)
+      .backgroundColor('rgba(0,0,0,0.4)')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .margin({ right: 12 })
+      .onClick(() => {
+        router.pushUrl({ url: 'pages/publish/PublishPostPage' }).catch(() => {});
+      })
 
-      Row() {
-        Text('📷').fontSize(12)
-        Text('更换背景').fontSize(11).fontColor('#FFFFFF').margin({ left: 4 })
+      // 设置按钮
+      Column() {
+        Text('⚙️')
+          .fontSize(18)
       }
-      .padding({ left: 10, right: 10, top: 5, bottom: 5 }).backgroundColor('rgba(0,0,0,0.35)').borderRadius(14)
-      .position({ x: '60%', y: 180 }).onClick(() => this.changeCoverBg())
+      .width(36)
+      .height(36)
+      .borderRadius(18)
+      .backgroundColor('rgba(0,0,0,0.4)')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .onClick(() => this.navigateToSettings())
     }
     .width('100%')
-    .height(220)
+    .padding({ left: 16, right: 16, top: 48 }) // top: 48 避开系统状态栏
+    .position({ x: 0, y: 0 })
   }
 
   @Builder
@@ -343,6 +415,7 @@ export struct ProfilePage {
     Row() {
       Stack() {
         Column().width(84).height(84).borderRadius(42).linearGradient({ direction: GradientDirection.RightBottom, colors: [['#7DD3FC', 0], ['#0EA5E9', 1]] })
+
         Column() {
           if (this.avatar) {
             Image(this.avatar).width(76).height(76).borderRadius(38).objectFit(ImageFit.Cover)
@@ -413,6 +486,12 @@ export struct ProfilePage {
       .width('100%').padding({ left: 16, right: 16, top: 14, bottom: 14 })
       .backgroundColor('#FFFFFF').borderRadius(16).border({ width: 1, color: '#F1F5F9' })
       .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: 2 })
+      .gesture(
+        PanGesture({ direction: PanDirection.Vertical, distance: 5 })
+          .onActionStart((event: GestureEvent) => { this.handleGlobeDragStart(event.offsetY); })
+          .onActionUpdate((event: GestureEvent) => { this.handleGlobeDragUpdate(event.offsetY); })
+          .onActionEnd((event: GestureEvent) => { this.handleGlobeDragEnd(event.offsetY); })
+      )
 
       Column() {
         Stack() {
@@ -429,13 +508,6 @@ export struct ProfilePage {
       .padding({ top: this.globeHeight > 0 ? 16 : 0 }).alignItems(HorizontalAlign.Center).clip(true)
     }
     .width('100%').padding({ left: 16, right: 16, top: 12, bottom: this.globeHeight > 0 ? 8 : 0 })
-    // 这里是关键：在整个容器外层绑定统一手势
-    .gesture(
-      PanGesture({ direction: PanDirection.Vertical, distance: 5 })
-        .onActionStart((event: GestureEvent) => { this.handleGlobeDragStart(event.offsetY); })
-        .onActionUpdate((event: GestureEvent) => { this.handleGlobeDragUpdate(event.offsetY); })
-        .onActionEnd((event: GestureEvent) => { this.handleGlobeDragEnd(event.offsetY); })
-    )
   }
 
   @Builder
@@ -469,7 +541,6 @@ export struct ProfilePage {
     Column() {
       Column() {
         Row() {
-          // 修改为“喜欢”
           this.TabItem('作品', 0)
           this.TabItem('喜欢', 1)
           this.TabItem('收藏', 2)
@@ -493,25 +564,32 @@ export struct ProfilePage {
         Column().width(4).height(4).borderRadius(2).backgroundColor('#38BDF8').margin({ top: 8 })
       }
     }
-    .layoutWeight(1).padding({ top: 16, bottom: 12 }).alignItems(HorizontalAlign.Center)
-    .onClick(() => { this.currentTab = index; })
+    .layoutWeight(1).padding({ top: 16, bottom: 12 }).alignItems(HorizontalAlign.Center).onClick(() => { this.currentTab = index; })
   }
 
   @Builder
   PhotoGrid() {
     Column() {
       if (this.isLoading) {
-        Column() { LoadingProgress().width(40).height(40).color('#38BDF8') }
-        .width('100%').padding({ top: 60, bottom: 60 }).justifyContent(FlexAlign.Center)
+        Column() { LoadingProgress().width(40).height(40).color('#38BDF8') }.width('100%').padding({ top: 60, bottom: 60 }).justifyContent(FlexAlign.Center)
       } else if (this.currentTab === 0) {
-        if (this.myPosts.length === 0) this.EmptyStateView('📭', '暂无作品')
-        else this.RenderPostGrid(this.myPosts)
+        if (this.myPosts.length === 0) {
+          this.EmptyStateView('📭', '暂无作品')
+        } else {
+          this.RenderPostGrid(this.myPosts)
+        }
       } else if (this.currentTab === 1) {
-        if (this.likedPosts.length === 0) this.EmptyStateView('⭐', '暂无喜欢的内容')
-        else this.RenderPostGrid(this.likedPosts)
+        if (this.likedPosts.length === 0) {
+          this.EmptyStateView('⭐', '暂无喜欢的内容')
+        } else {
+          this.RenderPostGrid(this.likedPosts)
+        }
       } else if (this.currentTab === 2) {
-        if (this.collectedPosts.length === 0) this.EmptyStateView('📂', '暂无收藏的内容')
-        else this.RenderPostGrid(this.collectedPosts)
+        if (this.collectedPosts.length === 0) {
+          this.EmptyStateView('📂', '暂无收藏的内容')
+        } else {
+          this.RenderPostGrid(this.collectedPosts)
+        }
       }
     }
     .width('100%').padding(1)
@@ -522,13 +600,9 @@ export struct ProfilePage {
     Column() {
       Text(icon).fontSize(48)
       Text(text).fontSize(14).fontColor('#94A3B8').margin({ top: 12 })
-    }
-    .width('100%')
-    .padding({ top: 60, bottom: 60 })
-    .alignItems(HorizontalAlign.Center)
+    }.width('100%').padding({ top: 60, bottom: 60 }).alignItems(HorizontalAlign.Center)
   }
 
-  // 负责渲染网格，接收直接引用的数组
   @Builder
   RenderPostGrid(posts: Post[]) {
     Flex({ wrap: FlexWrap.Wrap }) {
@@ -536,7 +610,7 @@ export struct ProfilePage {
         Stack() {
           Column().width('100%').aspectRatio(1).backgroundColor('#E2E8F0')
 
-          if (post.images && post.images.length > 0) {
+          if (post.images.length > 0) {
             Image(post.images[0]).width('100%').height('100%').objectFit(ImageFit.Cover)
           } else {
             Column()
@@ -545,7 +619,7 @@ export struct ProfilePage {
             Text(post.content).fontSize(10).fontColor('#FFFFFF').padding(8).maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
           }
 
-          if (post.images && post.images.length > 1) {
+          if (post.images.length > 1) {
             Text('📷').fontSize(12).position({ x: '80%', y: 8 })
           }
         }
