@@ -2,7 +2,6 @@
  * 编辑资料页面 - 真实输入与 API 保存
  */
 
-import { router, promptAction } from '@kit.ArkUI';
 import { ApiService, ApiUser, UpdateProfileParams } from '../../services/ApiService';
 
 type GenderType = '男' | '女' | '保密';
@@ -153,12 +152,16 @@ struct EditProfilePage {
       AppStorage.setOrCreate('currentUserNickname', this.nickname);
       AppStorage.setOrCreate('currentUserAvatar', this.avatar);
 
-      promptAction.showToast({ message: '保存成功' });
-      router.back();
+      this.getUIContext().getPromptAction().showToast({ message: '保存成功' });
+      this.getUIContext().getRouter().back();
 
     } catch (error) {
       const err = error as Error;
-      promptAction.showToast({ message: '保存失败: ' + err.message });
+      try {
+        this.getUIContext().getPromptAction().showToast({ message: '保存失败: ' + err.message });
+      } catch (e) {
+        console.error('[EditProfile] Toast异常:', e);
+      }
     } finally {
       this.isLoading = false;
     }
@@ -201,7 +204,7 @@ struct EditProfilePage {
         .width(44)
         .height(44)
         .justifyContent(FlexAlign.Center)
-        .onClick(() => { router.back(); })
+        .onClick(() => { this.getUIContext().getRouter().back(); })
 
         Blank()
         Text('编辑资料')
@@ -320,9 +323,13 @@ struct EditProfilePage {
       Column() {
         this.EditItemWithValue('性别', this.gender, () => { this.showGenderPicker(); })
         this.Divider()
-        this.EditItemWithValue('生日', this.birthday, () => { promptAction.showToast({ message: '日期选择暂未接入' }); })
+        this.EditItemWithValue('生日', this.birthday, () => {
+          try { this.getUIContext().getPromptAction().showToast({ message: '日期选择暂未接入' }); } catch (e) { /* ignore */ }
+        })
         this.Divider()
-        this.EditItemWithValue('地区', this.location, () => { promptAction.showToast({ message: '地区选择暂未接入' }); })
+        this.EditItemWithValue('地区', this.location, () => {
+          try { this.getUIContext().getPromptAction().showToast({ message: '地区选择暂未接入' }); } catch (e) { /* ignore */ }
+        })
       }
       .backgroundColor('#FFFFFF')
       .borderRadius(12)
@@ -371,19 +378,27 @@ struct EditProfilePage {
   }
 
   private showAvatarOptions(): void {
-    promptAction.showActionMenu({
-      title: '更换头像',
-      buttons: [{ text: '拍照', color: '#1E293B' }, { text: '相册', color: '#1E293B' }, { text: '取消', color: '#64748B' }]
-    });
+    try {
+      this.getUIContext().getPromptAction().showActionMenu({
+        title: '更换头像',
+        buttons: [{ text: '拍照', color: '#1E293B' }, { text: '相册', color: '#1E293B' }, { text: '取消', color: '#64748B' }]
+      });
+    } catch (e) {
+      console.error('[EditProfile] showAvatarOptions异常:', e);
+    }
   }
 
   private showGenderPicker(): void {
-    promptAction.showActionMenu({
-      title: '选择性别',
-      buttons: [{ text: '男', color: '#1E293B' }, { text: '女', color: '#1E293B' }, { text: '保密', color: '#1E293B' }]
-    }).then((res) => {
-      const opts: GenderType[] = ['男', '女', '保密'];
-      if (res.index >= 0 && res.index < 3) this.gender = opts[res.index];
-    });
+    try {
+      this.getUIContext().getPromptAction().showActionMenu({
+        title: '选择性别',
+        buttons: [{ text: '男', color: '#1E293B' }, { text: '女', color: '#1E293B' }, { text: '保密', color: '#1E293B' }]
+      }).then((res) => {
+        const opts: GenderType[] = ['男', '女', '保密'];
+        if (res.index >= 0 && res.index < 3) this.gender = opts[res.index];
+      });
+    } catch (e) {
+      console.error('[EditProfile] showGenderPicker异常:', e);
+    }
   }
 }
