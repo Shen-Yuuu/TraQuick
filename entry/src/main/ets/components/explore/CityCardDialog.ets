@@ -4,6 +4,7 @@
  */
 
 import { City } from '../../models/City';
+import { formatCount } from '../../utils/Formatter';
 
 @Component
 export struct CityCardDialog {
@@ -100,8 +101,8 @@ export struct CityCardDialog {
             // 信息标签
             Row({ space: 8 }) {
               this.InfoChip('📍', this.formatDistance())
-              this.InfoChip('👥', `${this.formatCount(this.city.visitorsCount)}人去过`)
-              this.InfoChip('📝', `${this.formatCount(this.city.postsCount)}篇`)
+              this.InfoChip('👥', `${formatCount(this.city.visitorsCount)}人去过`)
+              this.InfoChip('📝', `${formatCount(this.city.postsCount)}篇`)
             }
             .margin({ top: 20 })
 
@@ -272,12 +273,5 @@ export struct CityCardDialog {
     return `${dist.toLocaleString()}km`;
   }
 
-  private formatCount(count: number): string {
-    if (count >= 10000) {
-      return (count / 10000).toFixed(1) + 'w';
-    } else if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'k';
-    }
-    return count.toString();
-  }
+  // formatCount → 已抽取到 utils/Formatter.ets
 }
