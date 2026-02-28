@@ -1,8 +1,9 @@
 ﻿/**
- * 投递漂流瓶页面 - 符合设计数
+ * 投递漂流瓶页面 - 支持 API 集成
  */
 
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
+import { ApiService } from '../../services/ApiService';
 
 @Entry
 @Component
@@ -10,6 +11,12 @@ struct DriftBottlePage {
   @State content: string = '';
   @State isTaskBottle: boolean = false;
   @State isPublishing: boolean = false;
+  @State selectedMood: string = '😊';
+  @State errorMessage: string = '';
+
+  private readonly MAX_CONTENT_LENGTH: number = 500;
+
+  private moods: string[] = ['😊', '😢', '🥰', '😎', '🤔', '✨'];
 
   build() {
     Column() {
@@ -104,24 +111,28 @@ struct DriftBottlePage {
           .backgroundColor('transparent')
           .caretColor('#38BDF8')
           .onChange((value: string) => {
-            this.content = value;
+            this.content = value.length <= this.MAX_CONTENT_LENGTH ? value : value.substring(0, this.MAX_CONTENT_LENGTH);
+            this.errorMessage = '';
           })
 
         Row() {
           Row() {
-            Text('😊')
-              .fontSize(16)
-            Text('MOOD')
-              .fontSize(11)
-              .fontColor('#94A3B8')
-              .margin({ left: 6 })
+            ForEach(this.moods, (mood: string) => {
+              Text(mood)
+                .fontSize(this.selectedMood === mood ? 20 : 16)
+                .opacity(this.selectedMood === mood ? 1 : 0.5)
+                .margin({ right: 8 })
+                .onClick(() => {
+                  this.selectedMood = mood;
+                })
+            })
           }
 
           Blank()
 
-          Text(`${this.content.length}/500`)
+          Text(`${this.content.length}/${this.MAX_CONTENT_LENGTH}`)
             .fontSize(12)
-            .fontColor('#CBD5E1')
+            .fontColor(this.content.length >= this.MAX_CONTENT_LENGTH ? '#EF4444' : '#CBD5E1')
         }
         .width('100%')
         .margin({ top: 8 })
@@ -177,25 +188,43 @@ struct DriftBottlePage {
       // 投递按钮
       Button() {
         Row() {
-          Text('投递')
+          if (this.isPublishing) {
+            LoadingProgress()
+              .width(16)
+              .height(16)
+              .color('#FFFFFF')
+              .margin({ right: 8 })
+          }
+          Text(this.isPublishing ? '投递中...' : '投递')
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
             .fontColor('#FFFFFF')
-          Text('→')
-            .fontSize(16)
-            .fontColor('#FFFFFF')
-            .margin({ left: 8 })
+          if (!this.isPublishing) {
+            Text('→')
+              .fontSize(16)
+              .fontColor('#FFFFFF')
+              .margin({ left: 8 })
+          }
         }
       }
       .width('90%')
       .height(52)
-      .backgroundColor('#38BDF8')
+      .backgroundColor(this.content.trim() ? '#38BDF8' : '#CBD5E1')
       .borderRadius(26)
       .shadow({ radius: 16, color: 'rgba(14, 165, 233, 0.35)', offsetY: 6 })
       .margin({ bottom: 16 })
+      .enabled(this.content.trim().length > 0 && !this.isPublishing)
       .onClick(() => {
         this.handlePublish();
       })
+
+      // 错误提示
+      if (this.errorMessage) {
+        Text(this.errorMessage)
+          .fontSize(12)
+          .fontColor('#EF4444')
+          .margin({ bottom: 8 })
+      }
 
       // 社区公约
       Text('TraQuick 社区公约：请友善交流，传递温暖')
@@ -208,14 +237,36 @@ struct DriftBottlePage {
     .backgroundColor('#F8FAFC')
   }
 
-  handlePublish() {
-    if (!this.content) {
+  /**
+   * 发布漂流瓶
+   * TODO: 对接后端 API（ApiService.createDriftBottle）
+   */
+  async handlePublish(): Promise<void> {
+    if (!this.content.trim()) {
+      this.errorMessage = '请写下你的愿望或心情';
       return;
     }
+
     this.isPublishing = true;
-    setTimeout(() => {
-      this.isPublishing = false;
+    this.errorMessage = '';
+
+    try {
+      // TODO: 替换为真实 API
+      // await ApiService.createDriftBottle({
+      //   content: this.content,
+      //   mood: this.selectedMood,
+      //   isTask: this.isTaskBottle,
+      // });
+      await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+
+      promptAction.showToast({ message: '漂流瓶已投入大海 🌊' });
       router.back();
-    }, 1500);
+    } catch (error) {
+      const err = error as Error;
+      this.errorMessage = err.message || '投递失败，请重试';
+      console.error(`[DriftBottle] 投递失败: ${err.message}`);
+    } finally {
+      this.isPublishing = false;
+    }
   }
 }

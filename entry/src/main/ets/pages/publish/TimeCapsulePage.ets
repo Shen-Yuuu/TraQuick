@@ -1,8 +1,10 @@
 ﻿/**
- * 埋下时空胶囊页面 - 符合设计数
+ * 埋下时空胶囊页面 - 支持 API 集成
  */
 
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 interface TimeOption {
   label: string;
@@ -160,9 +162,7 @@ struct TimeCapsulePage {
               .borderRadius(12)
               .justifyContent(FlexAlign.Center)
               .onClick(() => {
-                if (this.selectedImages.length < 9) {
-                  this.selectedImages.push('image_' + this.selectedImages.length);
-                }
+                this.openPhotoPicker();
               })
 
               // 已选图片
@@ -292,22 +292,32 @@ struct TimeCapsulePage {
         // 确认埋下按钮
         Button() {
           Row() {
-            Text('确认埋下')
+            if (this.isPublishing) {
+              LoadingProgress()
+                .width(16)
+                .height(16)
+                .color('#FFFFFF')
+                .margin({ right: 8 })
+            }
+            Text(this.isPublishing ? '埋藏中...' : '确认埋下')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
               .fontColor('#FFFFFF')
-            Text('→')
-              .fontSize(16)
-              .fontColor('#FFFFFF')
-              .margin({ left: 8 })
+            if (!this.isPublishing) {
+              Text('→')
+                .fontSize(16)
+                .fontColor('#FFFFFF')
+                .margin({ left: 8 })
+            }
           }
         }
         .width('90%')
         .height(52)
-        .backgroundColor('#2563EB')
+        .backgroundColor(this.content.trim() ? '#2563EB' : '#94A3B8')
         .borderRadius(26)
         .shadow({ radius: 16, color: 'rgba(14, 165, 233, 0.35)', offsetY: 6 })
         .margin({ bottom: 32 })
+        .enabled(this.content.trim().length > 0 && !this.isPublishing)
         .onClick(() => {
           this.handlePublish();
         })
@@ -324,14 +334,66 @@ struct TimeCapsulePage {
     .backgroundColor('#1E293B')
   }
 
-  handlePublish() {
-    if (!this.content) {
+  /**
+   * 打开系统相册选图
+   */
+  private openPhotoPicker(): void {
+    try {
+      const picker = new photoAccessHelper.PhotoViewPicker();
+      const remainCount = 9 - this.selectedImages.length;
+      if (remainCount <= 0) return;
+
+      const options = new photoAccessHelper.PhotoSelectOptions();
+      options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+      options.maxSelectNumber = remainCount;
+
+      picker.select(options).then((result: photoAccessHelper.PhotoSelectResult) => {
+        if (result && result.photoUris && result.photoUris.length > 0) {
+          const newImages = [...this.selectedImages, ...result.photoUris];
+          this.selectedImages = newImages.slice(0, 9);
+        }
+      }).catch((err: BusinessError) => {
+        console.error(`[TimeCapsule] 选图失败: ${err.message}`);
+      });
+    } catch (error) {
+      const err = error as BusinessError;
+      console.error(`[TimeCapsule] PhotoViewPicker 错误: ${err.message}`);
+    }
+  }
+
+  /**
+   * 发布时空胶囊
+   * TODO: 对接后端 API（ApiService.createTimeCapsule）
+   */
+  async handlePublish(): Promise<void> {
+    if (!this.content.trim()) {
+      promptAction.showToast({ message: '请写下给未来的自己想说的话' });
       return;
     }
+
     this.isPublishing = true;
-    setTimeout(() => {
-      this.isPublishing = false;
+    try {
+      const selectedTime = this.timeOptions[this.selectedTimeIndex];
+      const openMonths = selectedTime.value;
+
+      // TODO: 替换为真实 API
+      // await ApiService.createTimeCapsule({
+      //   content: this.content,
+      //   images: this.selectedImages,
+      //   openAfterMonths: openMonths,
+      //   location: this.locationName,
+      //   coordinates: this.coordinates,
+      // });
+      await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+
+      promptAction.showToast({ message: `时空胶囊已埋下 ⏳ ${selectedTime.label}后开启` });
       router.back();
-    }, 1500);
+    } catch (error) {
+      const err = error as Error;
+      promptAction.showToast({ message: err.message || '埋藏失败，请重试' });
+      console.error(`[TimeCapsule] 发布失败: ${err.message}`);
+    } finally {
+      this.isPublishing = false;
+    }
   }
 }
