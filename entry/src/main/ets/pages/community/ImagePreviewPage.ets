@@ -1,15 +1,23 @@
 /**
  * 图片预览页 - 全屏滑动查看
- * 支持：左右切换、双击点赞、保存提示
+ * 支持：左右切换、双击点赞、保存提示*
+ * 路由参数：
+ *   - images: string[]   图片URL数组（优先使用）
+ *   - imageIndex: number  初始显示的图片索引
+ *   - postId?: string     帖子ID（可选，用于回传操作）
  */
 
-import { Post } from '../../models/Post';
-import { mockPosts } from '../../services/MockData';
 import { router } from '@kit.ArkUI';
+
+interface ImagePreviewParams {
+  images?: string[];
+  imageIndex?: number;
+  postId?: string;
+}
 
 @Entry
 @Component
-export struct ImagePreviewPage {
+struct ImagePreviewPage {
   @State images: string[] = [];
   @State currentIndex: number = 0;
   @State likedImages: boolean[] = [];
@@ -17,14 +25,16 @@ export struct ImagePreviewPage {
   private postId: string = '';
 
   aboutToAppear(): void {
-    const params = router.getParams() as Record<string, string | number>;
-    if (params && params.postId) {
-      this.postId = String(params.postId);
-    }
-    const indexParam = params && params.imageIndex !== undefined ? Number(params.imageIndex) : 0;
-    const found: Post | undefined = mockPosts.find(p => p.id === this.postId);
-    if (found && found.images) {
-      this.images = found.images.slice();
+    const params = router.getParams() as ImagePreviewParams;
+    if (params) {
+      this.postId = params.postId || '';
+
+      // 优先从路由参数获取图片列表
+      if (params.images && params.images.length > 0) {
+        this.images = params.images.slice();
+      }
+
+      const indexParam = params.imageIndex !== undefined ? Number(params.imageIndex) : 0;
       this.likedImages = new Array(this.images.length).fill(false);
       const safeIndex = Math.min(Math.max(indexParam, 0), Math.max(this.images.length - 1, 0));
       this.currentIndex = safeIndex;

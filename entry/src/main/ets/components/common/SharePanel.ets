@@ -5,7 +5,16 @@
 
 import { Colors, Radius, Spacing, FontSizes } from '../../utils/Constants';
 import { User } from '../../models/User';
-import { mockCurrentUser, mockUsers } from '../../services/MockData';
+
+/**
+ * 分享面板用的简化用户信息
+ * 调用方可以传入任意来源的用户列表（API / 本地缓存 / 关注列表等）
+ */
+interface ShareTarget {
+  id: string;
+  nickname: string;
+  avatar?: string;
+}
 
 @Component
 export struct SharePanel {
@@ -15,7 +24,11 @@ export struct SharePanel {
   onClose: () => void = () => {};
   onShareToUser: (userId: string, text: string) => void = () => {};
 
-  private shareUsers: User[] = [mockCurrentUser, ...mockUsers];
+  /**
+   * 分享目标用户列表 —— 由调用方传入
+   * 默认为空数组，调用方应从 API 获取好友/关注列表后传入
+   */
+  shareTargets: ShareTarget[] = [];
 
   aboutToAppear(): void {
     animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
@@ -54,22 +67,30 @@ export struct SharePanel {
           // 用户头像横滑列表
           Scroll() {
             Row({ space: 16 }) {
-              ForEach(this.shareUsers, (user: User) => {
+              ForEach(this.shareTargets, (target: ShareTarget) => {
                 Column() {
                   // 头像
-                  Column() {
-                    Text((user.nickname || 'U').charAt(0))
-                      .fontSize(20)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor('#FFFFFF')
+                  if (target.avatar) {
+                    Image(target.avatar)
+                      .width(56)
+                      .height(56)
+                      .borderRadius(28)
+                      .objectFit(ImageFit.Cover)
+                  } else {
+                    Column() {
+                      Text((target.nickname || 'U').charAt(0))
+                        .fontSize(20)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor('#FFFFFF')
+                    }
+                    .width(56)
+                    .height(56)
+                    .borderRadius(28)
+                    .backgroundColor('#38BDF8')
+                    .justifyContent(FlexAlign.Center)
                   }
-                  .width(56)
-                  .height(56)
-                  .borderRadius(28)
-                  .backgroundColor('#38BDF8')
-                  .justifyContent(FlexAlign.Center)
 
-                  Text(user.nickname)
+                  Text(target.nickname)
                     .fontSize(11)
                     .fontColor('#64748B')
                     .maxLines(1)
@@ -80,7 +101,7 @@ export struct SharePanel {
                 }
                 .alignItems(HorizontalAlign.Center)
                 .onClick(() => {
-                  this.onShareToUser(user.id, this.shareText);
+                  this.onShareToUser(target.id, this.shareText);
                   this.onClose();
                 })
               })

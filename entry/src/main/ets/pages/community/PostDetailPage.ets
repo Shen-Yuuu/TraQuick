@@ -1,13 +1,11 @@
-/**
+﻿/**
  * 动态详情页 - 抖音风格评论区
  * 支持：查看所有评论、点赞回复评论、点击头像跳转用户主页、过渡动画
  */
 
-import { router } from '@kit.ArkUI';
-import { ApiService, ApiPost, CommentListData, ApiComment, CreateCommentParams,
-  CollectResult,
-  LikeResult} from '../../services/ApiService';
-import { Post, PostComment, PostAuthor, PostLocation, CommentReply } from '../../models/Post';
+import { router, promptAction } from '@kit.ArkUI';
+import { ApiService, ApiPost, CommentListData, ApiComment, CreateCommentParams, CollectResult, LikeResult } from '../../services/ApiService';
+import { Post, PostComment, PostAuthor, PostLocation, CommentReply,PostUpdateInfo } from '../../models/Post';
 
 @Entry
 @Component
@@ -26,6 +24,12 @@ struct PostDetailPage {
   @State commentCount: number = 0;
   @State shareCount: number = 0;
   @State hasChanged: boolean = false; // 标记是否有数据变更
+
+  // 新增：关注相关状态
+  @State isFollowing: boolean = false;
+  @State isSelf: boolean = false;
+  @StorageProp('currentUserId') currentUserId: string = '';
+
   private postId: string = '';
 
   aboutToAppear(): void {
@@ -56,6 +60,17 @@ struct PostDetailPage {
       this.commentCount = apiPost.commentCount;
       this.shareCount = apiPost.shareCount;
 
+      // 检查是否是自己的帖子
+      this.isSelf = (apiPost.author.id === this.currentUserId);
+
+      // 如果不是自己的帖子，查询是否已关注
+      if (!this.isSelf) {
+        const userProfile = await ApiService.getUserProfile(apiPost.author.id);
+        if (userProfile.relation) {
+          this.isFollowing = userProfile.relation.isFollowing;
+        }
+      }
+
       await this.loadComments();
 
     } catch (error) {
@@ -64,25 +79,45 @@ struct PostDetailPage {
     }
   }
 
+  // 新增：处理关注/取消关注逻辑
+  private async handleFollow(): Promise<void> {
+    if (!this.post) return;
+
+    // 乐观更新
+    const wasFollowing = this.isFollowing;
+    this.isFollowing = !wasFollowing;
+
+    try {
+      if (wasFollowing) {
+        await ApiService.unfollowUser(this.post.author.id);
+        promptAction.showToast({ message: '已取消关注' });
+      } else {
+        await ApiService.followUser(this.post.author.id);
+        promptAction.showToast({ message: '关注成功' });
+      }
+      this.hasChanged = true; // 可能会影响列表页或其他页面的刷新
+    } catch (error) {
+      // 失败回滚
+      this.isFollowing = wasFollowing;
+      promptAction.showToast({ message: '操作失败' });
+      console.error('[PostDetail] 关注/取消关注失败:', (error as Error).message);
+    }
+  }
+
   private async loadComments(): Promise<void> {
     try {
       const result: CommentListData = await ApiService.getComments(this.postId, 1, 50);
 
-      // 将两级结构展开为平铺列表
       const flatComments: PostComment[] = [];
 
       for (const apiComment of result.items) {
-        // 添加顶级评论
         flatComments.push(this.convertApiComment(apiComment));
-
-        // 展开子评论
         if (apiComment.children && apiComment.children.length > 0) {
           for (const child of apiComment.children) {
             flatComments.push(this.convertApiComment(child));
           }
         }
       }
-
       this.comments = flatComments;
 
     } catch (error) {
@@ -92,18 +127,20 @@ struct PostDetailPage {
   }
 
   private goBack(): void {
-    // 如果有变更，将变更后的数据写入 AppStorage，供列表页局部更新
     if (this.hasChanged && this.post) {
-      const updatedInfo: string = JSON.stringify({
-        postId: this.postId,
+      // 构造更新对象
+      const updateInfo: PostUpdateInfo = {
+        postId: this.post.id,
         isLiked: this.isLiked,
         isCollected: this.isCollected,
         likeCount: this.likeCount,
         collectCount: this.collectCount,
         commentCount: this.commentCount,
-        shareCount: this.shareCount,
-      });
-      AppStorage.setOrCreate('communityPostUpdate', updatedInfo);
+        shareCount: this.shareCount
+      };
+
+      // 写入 AppStorage (转为 JSON 字符串以避免引用传递问题)
+      AppStorage.setOrCreate('communityPostUpdate', JSON.stringify(updateInfo));
     }
     router.back();
   }
@@ -158,7 +195,6 @@ struct PostDetailPage {
     const wasLiked = this.isLiked;
     const originalCount = this.likeCount;
 
-    // 1. 乐观更新 UI（立即变红/变白）
     this.isLiked = !wasLiked;
     this.likeCount = Math.max(0, originalCount + (this.isLiked ? 1 : -1));
     this.hasChanged = true;
@@ -170,12 +206,8 @@ struct PostDetailPage {
       } else {
         result = await ApiService.likePost(this.post.id);
       }
-
-      // 2. API 成功后，用真实数据校准
       this.likeCount = result.likeCount;
-
     } catch (error) {
-      // 3. 失败回滚
       this.isLiked = wasLiked;
       this.likeCount = originalCount;
       const err = error as Error;
@@ -189,7 +221,6 @@ struct PostDetailPage {
     const wasCollected = this.isCollected;
     const originalCount = this.collectCount;
 
-    // 1. 乐观更新
     this.isCollected = !wasCollected;
     this.collectCount = Math.max(0, originalCount + (this.isCollected ? 1 : -1));
     this.hasChanged = true;
@@ -201,12 +232,8 @@ struct PostDetailPage {
       } else {
         result = await ApiService.collectPost(this.post.id);
       }
-
-      // 2. 校准
       this.collectCount = result.collectCount;
-
     } catch (error) {
-      // 3. 回滚
       this.isCollected = wasCollected;
       this.collectCount = originalCount;
       const err = error as Error;
@@ -224,7 +251,6 @@ struct PostDetailPage {
         content: c.content, likeCount: Math.max(0, c.likeCount + (c.isLiked ? -1 : 1)),
         isLiked: !c.isLiked, replyTo: c.replyTo, createdAt: c.createdAt,
       };
-      // 替换整个数组触发 @State 响应式刷新
       const newArr: PostComment[] = [];
       for (let i = 0; i < this.comments.length; i++) {
         newArr.push(i === idx ? updated : this.comments[i]);
@@ -268,7 +294,6 @@ struct PostDetailPage {
       if (this.post) {
         Scroll() {
           Column() {
-            // 帖子内容 - 入场动画
             Column() {
               this.AuthorSection()
               this.ContentSection()
@@ -281,7 +306,6 @@ struct PostDetailPage {
             .opacity(this.pageEnterAnim)
             .translate({ y: (1 - this.pageEnterAnim) * 20 })
 
-            // 评论区 - 延迟入场
             Column() {
               Divider().strokeWidth(8).color('#F1F5F9')
               this.CommentsSection()
@@ -354,7 +378,6 @@ struct PostDetailPage {
   @Builder
   AuthorSection() {
     Row() {
-      // 头像 - 点击跳转用户主页
       Column() {
         Text((this.post!.author.nickname || 'A').charAt(0))
           .fontSize(18)
@@ -387,14 +410,18 @@ struct PostDetailPage {
 
       Blank()
 
-      Button('+ 关注')
-        .fontSize(13)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#FFFFFF')
-        .backgroundColor('#38BDF8')
-        .borderRadius(20)
-        .height(34)
-        .padding({ left: 16, right: 16 })
+      // 只有不是看自己的帖子时，才显示关注按钮
+      if (!this.isSelf) {
+        Button(this.isFollowing ? '已关注' : '+ 关注')
+          .fontSize(13)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.isFollowing ? '#64748B' : '#FFFFFF')
+          .backgroundColor(this.isFollowing ? '#F1F5F9' : '#38BDF8')
+          .borderRadius(20)
+          .height(34)
+          .padding({ left: 16, right: 16 })
+          .onClick(() => this.handleFollow())
+      }
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 16 })
@@ -469,7 +496,6 @@ struct PostDetailPage {
   @Builder
   InteractionBar() {
     Row() {
-      // 点赞 — 直接引用 @State 保证响应式
       Column() {
         Text(this.isLiked ? '❤️' : '🤍')
           .fontSize(22)
@@ -482,7 +508,6 @@ struct PostDetailPage {
       .alignItems(HorizontalAlign.Center)
       .onClick(() => this.togglePostLike())
 
-      // 评论
       Column() {
         Text('💬')
           .fontSize(22)
@@ -495,7 +520,6 @@ struct PostDetailPage {
       }
       .alignItems(HorizontalAlign.Center)
 
-      // 收藏 — 直接引用 @State
       Column() {
         Text(this.isCollected ? '⭐' : '☆')
           .fontSize(22)
@@ -508,7 +532,6 @@ struct PostDetailPage {
       .alignItems(HorizontalAlign.Center)
       .onClick(() => this.togglePostCollect())
 
-      // 转发
       Column() {
         Text('↗️')
           .fontSize(22)
@@ -575,7 +598,6 @@ struct PostDetailPage {
   @Builder
   CommentItemView(comment: PostComment, index: number) {
     Row() {
-      // 评论者头像 - 可点击跳转
       Column() {
         Text((comment.userNickname || 'U').charAt(0))
           .fontSize(14)
@@ -828,9 +850,6 @@ struct PostDetailPage {
     return colors[index % colors.length];
   }
 
-  /**
-   * 将 ApiComment 转换为 PostComment
-   */
   private convertApiComment(apiComment: ApiComment): PostComment {
     const comment: PostComment = {
       id: apiComment.id,
@@ -844,7 +863,6 @@ struct PostDetailPage {
       createdAt: apiComment.createdAt,
     };
 
-    // 处理回复信息
     if (apiComment.replyToUser !== null) {
       const reply: CommentReply = {
         id: apiComment.replyToUser.id,
@@ -856,9 +874,6 @@ struct PostDetailPage {
     return comment;
   }
 
-  /**
-   * 将 ApiPost 转换为 Post
-   */
   private convertApiPost(apiPost: ApiPost): Post {
     const author: PostAuthor = {
       id: apiPost.author.id,
@@ -884,7 +899,6 @@ struct PostDetailPage {
       type: apiPost.type as 'image' | 'video',
     };
 
-    // 处理可选字段
     if (apiPost.video) {
       post.video = apiPost.video;
     }
@@ -908,5 +922,4 @@ struct PostDetailPage {
 
     return post;
   }
-
 }

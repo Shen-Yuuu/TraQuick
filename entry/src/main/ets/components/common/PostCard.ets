@@ -5,6 +5,7 @@
 import { Colors, FontSizes, Spacing, Radius } from '../../utils/Constants';
 import { Post } from '../../models/Post';
 import { UserAvatar } from './UserAvatar';
+import { formatTime, formatCount } from '../../utils/Formatter';
 
 @Component
 export struct PostCard {
@@ -94,7 +95,7 @@ export struct PostCard {
 
         Blank()
 
-        Text(this.formatTime(this.post.createdAt))
+        Text(formatTime(this.post.createdAt))
           .fontSize(FontSizes.mini)
           .fontColor(Colors.textQuaternary)
       }
@@ -216,7 +217,7 @@ export struct PostCard {
         .opacity(isActive ? 1 : 0.8)
 
       if (count > 0) {
-        Text(this.formatCount(count))
+        Text(formatCount(count))
           .fontSize(FontSizes.small)
           .fontColor(isActive ? Colors.primary : Colors.textTertiary)
           .margin({ left: 4 })
@@ -226,28 +227,5 @@ export struct PostCard {
     .onClick(onClick)
   }
 
-  formatCount(count: number): string {
-    if (count >= 10000) {
-      return (count / 10000).toFixed(1) + 'w';
-    } else if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'k';
-    }
-    return count.toString();
-  }
-
-  formatTime(dateStr: string): string {
-    // 简化时间格式化
-    const now = new Date();
-    const date = new Date(dateStr);
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return '刚刚';
-    if (minutes < 60) return `${minutes}分钟前`;
-    if (hours < 24) return `${hours}小时前`;
-    if (days < 7) return `${days}天前`;
-    return `${date.getMonth() + 1}月${date.getDate()}日`;
-  }
+  // formatCount / formatTime → 已抽取到 utils/Formatter.ets
 }
