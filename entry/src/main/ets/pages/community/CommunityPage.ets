@@ -6,8 +6,8 @@ import { router } from '@kit.ArkUI';
 import { SharePanel } from '../../components/common/SharePanel';
 import { Post, PostAuthor, PostLocation, PostUpdateInfo } from '../../models/Post';
 import { ApiService, ApiPost, PaginatedPosts, LikeResult, CollectResult } from '../../services/ApiService';
+import { formatTime, formatCount } from '../../utils/Formatter';
 
-@Entry
 @Component
 export struct CommunityPage {
   @State currentMainTab: number = 1; // 0: 视频, 1: 社区
@@ -42,12 +42,35 @@ export struct CommunityPage {
 
     try {
       const update = JSON.parse(this.postUpdateJson) as PostUpdateInfo;
-      this.applyPostUpdate(update);
+
+      // 查找并替换
+      const index = this.postList.findIndex(p => p.id === update.postId);
+      if (index !== -1) {
+        const original = this.postList[index];
+        const updated = this.clonePost(original);
+
+        // 覆盖最新数据
+        updated.isLiked = update.isLiked;
+        updated.isCollected = update.isCollected;
+        updated.likeCount = update.likeCount;
+        updated.collectCount = update.collectCount;
+        updated.commentCount = update.commentCount;
+        updated.shareCount = update.shareCount;
+
+        // 必须替换整个数组才能触发 UI 更新
+        const newList: Post[] = [];
+        for (let i = 0; i < this.postList.length; i++) {
+          newList.push(i === index ? updated : this.postList[i]);
+        }
+        this.postList = newList;
+
+        console.info(`[Community] 局部更新帖子 ${update.postId} 成功`);
+      }
     } catch (e) {
       console.error('[Community] 解析更新数据失败');
     }
 
-    // 消费完毕，清空，避免重复触发
+    // 消费完毕后清空，避免下次进入列表时重复触发
     AppStorage.setOrCreate('communityPostUpdate', '');
   }
 
@@ -359,7 +382,7 @@ export struct CommunityPage {
   private openImagePreview(post: Post, imageIndex: number): void {
     router.pushUrl({
       url: 'pages/community/ImagePreviewPage',
-      params: { postId: post.id, imageIndex: imageIndex }
+      params: { postId: post.id, images: post.images, imageIndex: imageIndex }
     }).catch(() => {});
   }
 
@@ -436,6 +459,8 @@ export struct CommunityPage {
 
       SharePanel({
         isShow: this.showSharePanel,
+        // TODO: 对接 API 获取好友/关注列表作为分享目标
+        shareTargets: [],
         onClose: () => { this.showSharePanel = false; },
         onShareToUser: (userId: string, text: string) => {
           this.showSharePanel = false;
@@ -575,7 +600,7 @@ export struct CommunityPage {
             ListItem() {
               this.EnhancedPostCard(post)
             }
-          }, (post: Post) => `${post.id}_${post.likeCount}_${post.collectCount}_${post.isLiked}_${post.isCollected}`)
+          }, (post: Post) => `${post.id}_${post.likeCount}_${post.collectCount}_${post.isLiked}_${post.isCollected}_${post.commentCount}`)
 
           // 加载更多
           if (this.isLoadingMore) {
@@ -733,7 +758,7 @@ export struct CommunityPage {
                   .fontColor('#38BDF8')
                   .margin({ right: 8 })
               }
-              Text(this.formatTime(post.createdAt))
+              Text(formatTime(post.createdAt))
                 .fontSize(12)
                 .fontColor('#B0B0B0')
             }
@@ -753,7 +778,7 @@ export struct CommunityPage {
             Text(post.isLiked ? '❤️' : '🤍')
               .fontSize(14)
             if (post.likeCount > 0) {
-              Text(`${this.formatCount(post.likeCount)}`)
+              Text(`${formatCount(post.likeCount)}`)
                 .fontSize(12)
                 .fontColor(post.isLiked ? '#38BDF8' : '#888888')
                 .margin({ left: 4 })
@@ -768,7 +793,7 @@ export struct CommunityPage {
             Text('💬')
               .fontSize(14)
             if (post.commentCount > 0) {
-              Text(`${this.formatCount(post.commentCount)}`)
+              Text(`${formatCount(post.commentCount)}`)
                 .fontSize(12)
                 .fontColor('#888888')
                 .margin({ left: 4 })
@@ -783,7 +808,7 @@ export struct CommunityPage {
             Text('⭐')
               .fontSize(14)
             if (post.collectCount > 0) {
-              Text(`${this.formatCount(post.collectCount)}`)
+              Text(`${formatCount(post.collectCount)}`)
                 .fontSize(12)
                 .fontColor(post.isCollected ? '#38BDF8' : '#888888')
                 .margin({ left: 4 })
@@ -798,7 +823,7 @@ export struct CommunityPage {
             Text('↗️')
               .fontSize(14)
             if (post.shareCount > 0) {
-              Text(`${this.formatCount(post.shareCount)}`)
+              Text(`${formatCount(post.shareCount)}`)
                 .fontSize(12)
                 .fontColor('#888888')
                 .margin({ left: 4 })
@@ -907,26 +932,7 @@ export struct CommunityPage {
     })
   }
 
-  private formatTime(dateStr: string): string {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    if (hours < 1) return '刚刚';
-    if (hours < 24) return `${hours}小时前`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}天前`;
-    return `${date.getMonth() + 1}月${date.getDate()}日`;
-  }
-
-  private formatCount(count: number): string {
-    if (count >= 10000) {
-      return `${(count / 10000).toFixed(1)}万`;
-    } else if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`;
-    }
-    return `${count}`;
-  }
+  // formatTime / formatCount → 已抽取到 utils/Formatter.ets
 
   @Builder
   VideoContent() {

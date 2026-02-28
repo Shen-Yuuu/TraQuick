@@ -125,7 +125,15 @@ class StorageUtil {
 }
 
 // 存储 Key 常量
-export const StorageKeys = {
+interface StorageKeysType {
+  TOKEN: string;
+  USER_INFO: string;
+  IS_LOGGED_IN: string;
+  FIRST_LAUNCH: string;
+  THEME_MODE: string;
+}
+
+export const StorageKeys: StorageKeysType = {
   TOKEN: 'user_token',
   USER_INFO: 'user_info',
   IS_LOGGED_IN: 'is_logged_in',

@@ -1,11 +1,12 @@
-/**
+﻿/**
  * 用户主页 - 对接真实 API
  */
 
-import { router } from '@kit.ArkUI';
+import { router, promptAction } from '@kit.ArkUI';
 import { ApiService, ApiPost, UserProfileData, FollowResult, PaginatedPosts } from '../../services/ApiService';
 import { Post, PostAuthor, PostLocation } from '../../models/Post';
 import { User } from '../../models/User';
+import { formatCount } from '../../utils/Formatter';
 
 @Entry
 @Component
@@ -43,6 +44,7 @@ struct UserProfilePage {
 
   private async loadUserProfile(): Promise<void> {
     this.isLoading = true;
+    console.info(`[DEBUG] 准备请求 UserProfile, userId: '${this.userId}'`);
     try {
       // 1. 获取用户详情
       const userData: UserProfileData = await ApiService.getUserProfile(this.userId);
@@ -70,18 +72,19 @@ struct UserProfilePage {
 
       // 2. 获取用户帖子列表
       const postsData: PaginatedPosts = await ApiService.getPosts(1, 20, 'latest', this.userId);
-      const newPosts = postsData.items.map(apiPost => this.convertApiPost(apiPost));
 
-      this.userPosts.splice(0, this.userPosts.length);
-      for (const p of newPosts) {
-        this.userPosts.push(p);
+      const newPosts: Post[] = [];
+      for (const apiPost of postsData.items) {
+        newPosts.push(this.convertApiPost(apiPost));
       }
 
+      this.userPosts = newPosts;
       this.likedPosts = [];
 
     } catch (error) {
       const err = error as Error;
-      console.error('[UserProfile] 加载失败:', err.message);
+      console.error(`[UserProfile] 获取用户(${this.userId})信息失败:`, err.message);
+      promptAction.showToast({ message: `加载失败: ${err.message}` });
     } finally {
       this.isLoading = false;
     }
@@ -116,6 +119,7 @@ struct UserProfilePage {
       this.user.followersCount = originalFollowers;
       const err = error as Error;
       console.error('[UserProfile] 关注失败:', err.message);
+      promptAction.showToast({ message: '操作失败，请重试' });
     }
   }
 
@@ -191,14 +195,7 @@ struct UserProfilePage {
     });
   }
 
-  private formatCount(count: number): string {
-    if (count >= 10000) {
-      return `${(count / 10000).toFixed(1)}w`;
-    } else if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`;
-    }
-    return `${count}`;
-  }
+  // formatCount → 已抽取到 utils/Formatter.ets
 
   private getCurrentPosts(): Post[] {
     return this.currentTab === 0 ? this.userPosts : this.likedPosts;
@@ -442,11 +439,11 @@ struct UserProfilePage {
           .padding({ left: 32, right: 32 })
 
         Row() {
-          this.StatColumn(this.formatCount(this.user?.followingCount || 0), '关注')
+          this.StatColumn(formatCount(this.user?.followingCount || 0), '关注')
           Column().width(1).height(24).backgroundColor('#E2E8F0')
-          this.StatColumn(this.formatCount(this.user?.followersCount || 0), '粉丝')
+          this.StatColumn(formatCount(this.user?.followersCount || 0), '粉丝')
           Column().width(1).height(24).backgroundColor('#E2E8F0')
-          this.StatColumn(this.formatCount(this.user?.citiesCount || 0), '城市')
+          this.StatColumn(formatCount(this.user?.citiesCount || 0), '城市')
           Column().width(1).height(24).backgroundColor('#E2E8F0')
           this.StatColumn(`${this.user?.countriesCount || 0}`, '国家')
         }
@@ -711,7 +708,7 @@ struct UserProfilePage {
               Row() {
                 Text('❤️')
                   .fontSize(8)
-                Text(`${this.formatCount(post.likeCount)}`)
+                Text(`${formatCount(post.likeCount)}`)
                   .fontSize(9)
                   .fontWeight(FontWeight.Bold)
                   .fontColor('#FFFFFF')
