@@ -3,13 +3,34 @@
  * 功能：账号安全、通用设置、关于、退出登录
  */
 
-import { router } from '@kit.ArkUI';
+import { authService } from '../../services/AuthService';
+import { storage, StorageKeys } from '../../utils/Storage';
 
 @Entry
 @Component
 struct SettingsPage {
   @State darkMode: boolean = false;
   @State language: string = '简体中文';
+  @State isLoggingOut: boolean = false;
+  @State cacheSize: string = '计算中...';
+
+  aboutToAppear(): void {
+    this.loadSettings();
+  }
+
+  private async loadSettings(): Promise<void> {
+    // 加载暗黑模式设置
+    this.darkMode = await storage.getBoolean(StorageKeys.THEME_MODE, false);
+    // 模拟缓存大小计算
+    this.cacheSize = '23.5 MB';
+  }
+
+  private async toggleDarkMode(isOn: boolean): Promise<void> {
+    this.darkMode = isOn;
+    await storage.setBoolean(StorageKeys.THEME_MODE, isOn);
+    // TODO: 应用主题切换
+    console.info(`[Settings] 深色模式: ${isOn}`);
+  }
 
   build() {
     Column() {
@@ -24,7 +45,7 @@ struct SettingsPage {
         .height(40)
         .justifyContent(FlexAlign.Center)
         .onClick(() => {
-          router.back();
+          this.getUIContext().getRouter().back();
         })
 
         Text('设置')
@@ -101,8 +122,7 @@ struct SettingsPage {
                 .selectedColor('#38BDF8')
                 .switchPointColor('#FFFFFF')
                 .onChange((isOn: boolean) => {
-                  this.darkMode = isOn;
-                  console.info(`[Settings] 深色模式: ${isOn}`);
+                  this.toggleDarkMode(isOn);
                 })
             }
             .width('100%')
@@ -113,6 +133,12 @@ struct SettingsPage {
 
             this.SettingCell('🌐', '语言', this.language, () => {
               console.info('[Settings] 语言设置');
+            })
+
+            this.CellDivider()
+
+            this.SettingCell('🗑️', '清除缓存', this.cacheSize, () => {
+              this.clearCache();
             })
           }
           .width('100%')
@@ -262,6 +288,8 @@ struct SettingsPage {
   // 退出登录确认弹窗（系统 AlertDialog）
   // ============================
   private showLogoutConfirm(): void {
+    if (this.isLoggingOut) return;
+
     AlertDialog.show({
       title: '退出登录',
       message: '确定要退出当前账号吗？退出后需要重新登录。',
@@ -284,26 +312,48 @@ struct SettingsPage {
   }
 
   // ============================
-  // 执行退出登录
+  // 执行退出登录 - 使用 AuthService 统一清除
   // ============================
-  private handleLogout(): void {
-    // 1. 清除本地登录状态（模拟）
+  private async handleLogout(): Promise<void> {
+    this.isLoggingOut = true;
     try {
-      AppStorage.delete('currentUserId');
-      AppStorage.delete('isLoggedIn');
-      AppStorage.delete('userToken');
-      AppStorage.delete('userNickname');
+      await authService.logout();
+      console.info('[Settings] 已退出登录，跳转登录页');
+
+      this.getUIContext().getRouter().replaceUrl({
+        url: 'pages/auth/LoginPage'
+      }).catch((err: Error) => {
+        console.error(`[Settings] 跳转失败: ${err.message}`);
+      });
     } catch (e) {
-      console.error(`[Settings] 清除存储异常: ${e}`);
+      console.error(`[Settings] 退出登录异常: ${e}`);
+    } finally {
+      this.isLoggingOut = false;
     }
+  }
 
-    console.info('[Settings] 已退出登录，跳转登录页');
-
-    // 2. 跳转登录页（replaceUrl 阻止回退）
-    router.replaceUrl({
-      url: 'pages/auth/LoginPage'
-    }).catch((err: Error) => {
-      console.error(`[Settings] 跳转失败: ${err.message}`);
+  // ============================
+  // 清除缓存
+  // ============================
+  private clearCache(): void {
+    this.getUIContext().showAlertDialog({
+      title: '清除缓存',
+      message: `确定要清除 ${this.cacheSize} 的缓存数据吗？`,
+      alignment: DialogAlignment.Center,
+      primaryButton: {
+        value: '取消',
+        fontColor: '#64748B',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: '清除',
+        fontColor: '#EF4444',
+        action: () => {
+          // TODO: 实际清除缓存逻辑
+          this.cacheSize = '0 MB';
+          console.info('[Settings] 缓存已清除');
+        }
+      }
     });
   }
 }
