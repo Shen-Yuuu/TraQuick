@@ -606,28 +606,28 @@ struct UserProfilePage {
   @Builder
   PostsGrid() {
     Column() {
-      if (this.currentTab === 2) {
+      if (this.isLoading) {
         Column() {
-          Text('⭐')
-            .fontSize(48)
-          Text('暂无收藏')
-            .fontSize(14)
-            .fontColor('#94A3B8')
-            .margin({ top: 12 })
-          Text('浏览社区时收藏喜欢的内容')
-            .fontSize(12)
-            .fontColor('#CBD5E1')
-            .margin({ top: 4 })
-        }
-        .width('100%')
-        .padding({ top: 60 })
-        .alignItems(HorizontalAlign.Center)
+          LoadingProgress().width(40).height(40).color('#38BDF8')
+        }.width('100%').padding({ top: 60 }).justifyContent(FlexAlign.Center)
+      } else if (this.currentTab === 2) {
+        Column() {
+          Text('⭐').fontSize(48)
+          Text('暂无收藏').fontSize(14).fontColor('#94A3B8').margin({ top: 12 })
+          Text('浏览社区时收藏喜欢的内容').fontSize(12).fontColor('#CBD5E1').margin({ top: 4 })
+        }.width('100%').padding({ top: 60 }).alignItems(HorizontalAlign.Center)
       } else if (this.currentTab === 0) {
-        // 直接传递 @State 变量 userPosts，保证绝对的响应式
-        this.PostGridContent(this.userPosts, '暂无作品')
+        if (this.userPosts.length === 0) {
+          this.EmptyStateView('📭', '暂无作品')
+        } else {
+          this.RenderPostGrid(this.userPosts)
+        }
       } else if (this.currentTab === 1) {
-        // 直接传递 @State 变量 likedPosts
-        this.PostGridContent(this.likedPosts, '暂无喜欢的内容')
+        if (this.likedPosts.length === 0) {
+          this.EmptyStateView('⭐', '暂无喜欢的内容')
+        } else {
+          this.RenderPostGrid(this.likedPosts)
+        }
       }
     }
     .width('100%')
@@ -635,101 +635,42 @@ struct UserProfilePage {
   }
 
   @Builder
-  PostGridContent(posts: Post[], emptyText: string) {
-    if (posts.length === 0) {
-      Column() {
-        Text('📭')
-          .fontSize(48)
-        Text(emptyText)
-          .fontSize(14)
-          .fontColor('#94A3B8')
-          .margin({ top: 12 })
-
-        if (this.isSelf && this.currentTab === 0) {
-          Button('去发布第一条动态')
-            .fontSize(14)
-            .fontColor('#FFFFFF')
-            .backgroundColor('#38BDF8')
-            .borderRadius(20)
-            .height(36)
-            .margin({ top: 16 })
-            .onClick(() => {
-              router.pushUrl({ url: 'pages/publish/PublishPostPage' });
-            })
-        }
+  EmptyStateView(icon: string, text: string) {
+    Column() {
+      Text(icon).fontSize(48)
+      Text(text).fontSize(14).fontColor('#94A3B8').margin({ top: 12 })
+      if (this.isSelf && this.currentTab === 0) {
+        Button('去发布第一条动态')
+          .fontSize(14).fontColor('#FFFFFF').backgroundColor('#38BDF8').borderRadius(20).height(36).margin({ top: 16 })
+          .onClick(() => { router.pushUrl({ url: 'pages/publish/PublishPostPage' }); })
       }
-      .width('100%')
-      .padding({ top: 60 })
-      .alignItems(HorizontalAlign.Center)
-    } else {
-      Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(posts, (post: Post, index: number) => {
-          Stack() {
-            Column()
-              .width('100%')
-              .aspectRatio(1)
-              .linearGradient({
-                direction: GradientDirection.RightBottom,
-                colors: [
-                  [this.getColor(index), 0],
-                  [this.getColorEnd(index), 1]
-                ]
-              })
+    }
+    .width('100%').padding({ top: 60 }).alignItems(HorizontalAlign.Center)
+  }
 
-            Column() {
-              Text(post.content)
-                .fontSize(10)
-                .fontColor('#FFFFFF')
-                .maxLines(2)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
+  @Builder
+  RenderPostGrid(posts: Post[]) {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(posts, (post: Post, index: number) => {
+        Stack() {
+          Column().width('100%').aspectRatio(1).linearGradient({ direction: GradientDirection.RightBottom, colors: [[this.getColor(index), 0], [this.getColorEnd(index), 1]] })
+          Column() { Text(post.content).fontSize(10).fontColor('#FFFFFF').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }) }
+          .width('100%').padding({ left: 6, right: 6, bottom: 24 }).position({ x: 0, y: '55%' })
+
+          Row() {
+            if (post.images && post.images.length > 1) {
+              Row() { Text('🖼️').fontSize(8); Text(`${post.images.length}`).fontSize(9).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ left: 2 }) }
+              .padding({ left: 4, right: 4, top: 2, bottom: 2 }).backgroundColor('rgba(0,0,0,0.4)').borderRadius(6)
             }
-            .width('100%')
-            .padding({ left: 6, right: 6, bottom: 24 })
-            .position({ x: 0, y: '55%' })
-
-            Row() {
-              if (post.images.length > 1) {
-                Row() {
-                  Text('🖼️')
-                    .fontSize(8)
-                  Text(`${post.images.length}`)
-                    .fontSize(9)
-                    .fontColor('#FFFFFF')
-                    .fontWeight(FontWeight.Bold)
-                    .margin({ left: 2 })
-                }
-                .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-                .backgroundColor('rgba(0,0,0,0.4)')
-                .borderRadius(6)
-              }
-
-              Blank()
-
-              Row() {
-                Text('❤️')
-                  .fontSize(8)
-                Text(`${formatCount(post.likeCount)}`)
-                  .fontSize(9)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor('#FFFFFF')
-                  .margin({ left: 2 })
-              }
-              .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-              .backgroundColor('rgba(0,0,0,0.4)')
-              .borderRadius(6)
-            }
-            .width('100%')
-            .padding({ left: 6, right: 6, bottom: 6 })
-            .position({ x: 0, y: '100%' })
-            .translate({ y: -28 })
+            Blank()
+            Row() { Text('❤️').fontSize(8); Text(`${formatCount(post.likeCount)}`).fontSize(9).fontWeight(FontWeight.Bold).fontColor('#FFFFFF').margin({ left: 2 }) }
+            .padding({ left: 4, right: 4, top: 2, bottom: 2 }).backgroundColor('rgba(0,0,0,0.4)').borderRadius(6)
           }
-          .width('33.33%')
-          .aspectRatio(1)
-          .padding(0.5)
-          .clip(true)
-          .onClick(() => this.navigateToPostDetail(post))
-        }, (post: Post, index: number) => `${post.id}_${index}`)
-      }
+          .width('100%').padding({ left: 6, right: 6, bottom: 6 }).position({ x: 0, y: '100%' }).translate({ y: -28 })
+        }
+        .width('33.33%').aspectRatio(1).padding(0.5).clip(true)
+        .onClick(() => this.navigateToPostDetail(post))
+      }, (post: Post) => `${post.id}_${post.likeCount}`)
     }
   }
 

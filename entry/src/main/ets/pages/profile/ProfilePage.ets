@@ -504,47 +504,70 @@ export struct ProfilePage {
   @Builder
   PhotoGrid() {
     Column() {
-      if (this.currentTab === 0) {
-        this.GridContent(this.myPosts, '暂无作品')
+      if (this.isLoading) {
+        // 数据还在请求时，显示加载中，防止提前渲染空状态
+        Column() {
+          LoadingProgress().width(40).height(40).color('#38BDF8')
+        }.width('100%').padding({ top: 60, bottom: 60 }).justifyContent(FlexAlign.Center)
+      } else if (this.currentTab === 0) {
+        // 直接读取 this.myPosts
+        if (this.myPosts.length === 0) {
+          this.EmptyStateView('📭', '暂无作品')
+        } else {
+          this.RenderPostGrid(this.myPosts)
+        }
       } else if (this.currentTab === 1) {
-        this.GridContent(this.likedPosts, '暂无喜欢的内容')
+        // 直接读取 this.likedPosts
+        if (this.likedPosts.length === 0) {
+          this.EmptyStateView('⭐', '暂无喜欢的内容')
+        } else {
+          this.RenderPostGrid(this.likedPosts)
+        }
       } else {
-        this.GridContent(this.collectedPosts, '暂无收藏的内容')
+        Column() {
+          Text('开发中...').fontSize(14).fontColor('#94A3B8')
+        }.width('100%').padding({ top: 60, bottom: 60 }).alignItems(HorizontalAlign.Center)
       }
     }
-    .width('100%').padding(1)
+    .width('100%')
+    .padding(1)
   }
 
   @Builder
-  GridContent(posts: Post[], emptyText: string) {
-    if (posts.length === 0) {
-      Column() {
-        Text('📭').fontSize(48)
-        Text(emptyText).fontSize(14).fontColor('#94A3B8').margin({ top: 12 })
-      }.width('100%').padding({ top: 60, bottom: 60 }).alignItems(HorizontalAlign.Center)
-    } else {
-      Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(posts, (post: Post, index: number) => {
-          Stack() {
-            Column().width('100%').aspectRatio(1).backgroundColor('#E2E8F0')
+  EmptyStateView(icon: string, text: string) {
+    Column() {
+      Text(icon).fontSize(48)
+      Text(text).fontSize(14).fontColor('#94A3B8').margin({ top: 12 })
+    }
+    .width('100%')
+    .padding({ top: 60, bottom: 60 })
+    .alignItems(HorizontalAlign.Center)
+  }
 
-            if (post.images.length > 0) {
-              Image(post.images[0]).width('100%').height('100%').objectFit(ImageFit.Cover)
-            } else {
-              Column()
-                .width('100%').height('100%')
-                .linearGradient({ direction: GradientDirection.RightBottom, colors: [[this.getPhotoColor(index), 0], [this.getPhotoColorEnd(index), 1]] })
-              Text(post.content).fontSize(10).fontColor('#FFFFFF').padding(8).maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
+  // 负责渲染网格，接收直接引用的数组
+  @Builder
+  RenderPostGrid(posts: Post[]) {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(posts, (post: Post, index: number) => {
+        Stack() {
+          Column().width('100%').aspectRatio(1).backgroundColor('#E2E8F0')
 
-            if (post.images.length > 1) {
-              Text('📷').fontSize(12).position({ x: '80%', y: 8 })
-            }
+          if (post.images && post.images.length > 0) {
+            Image(post.images[0]).width('100%').height('100%').objectFit(ImageFit.Cover)
+          } else {
+            Column()
+              .width('100%').height('100%')
+              .linearGradient({ direction: GradientDirection.RightBottom, colors: [[this.getPhotoColor(index), 0], [this.getPhotoColorEnd(index), 1]] })
+            Text(post.content).fontSize(10).fontColor('#FFFFFF').padding(8).maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
           }
-          .width('33.33%').aspectRatio(1).padding(0.5)
-          .onClick(() => this.navigateToPostDetail(post))
-        }, (post: Post) => post.id)
-      }
+
+          if (post.images && post.images.length > 1) {
+            Text('📷').fontSize(12).position({ x: '80%', y: 8 })
+          }
+        }
+        .width('33.33%').aspectRatio(1).padding(0.5)
+        .onClick(() => this.navigateToPostDetail(post))
+      }, (post: Post) => post.id)
     }
   }
 
