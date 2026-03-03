@@ -4,7 +4,7 @@
 import { http } from '@kit.NetworkKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 
-const BASE_URL: string = 'http://192.168.137.1:3000/api';
+const BASE_URL: string = 'http://192.168.71.2:3000/api';
 
 // ==================== 数据结构定义（全部用 class） ====================
 
@@ -540,7 +540,32 @@ class ApiServiceClass {
   // ============================================================
 
   async createPost(params: CreatePostParams): Promise<ApiPost> {
-    return await this.post<ApiPost>('/posts', params, true);
+    // 构建一个只有有效值的对象发给后端
+    const body: Record<string, string | number | string[]> = {
+      'content': params.content,
+      'type': params.type,
+      'images': params.images,
+      'tags': params.tags,
+    };
+
+    if (params.address && params.address.length > 0) {
+      body['address'] = params.address;
+    }
+
+    if (params.latitude !== 0) {
+      body['latitude'] = params.latitude;
+    }
+
+    if (params.longitude !== 0) {
+      body['longitude'] = params.longitude;
+    }
+
+    //只有 cityId 真的有值时，才发给后端
+    if (params.cityId && params.cityId.length > 0) {
+      body['cityId'] = params.cityId;
+    }
+
+    return await this.post<ApiPost>('/posts', body, true);
   }
 
   async getPosts(
