@@ -1,11 +1,12 @@
 /**
  * 图片预览页 - 全屏滑动查看 (支持点赞联动与保存相册)
  * 使用 SaveButton 安全组件保存图片，无需申请 WRITE_IMAGEVIDEO 权限
+ * 使用 request.downloadFile 下载大图，避免 http 模块的大小限制
  */
 
 import { router } from '@kit.ArkUI';
 import { ApiService } from '../../services/ApiService';
-import { http } from '@kit.NetworkKit';
+import { request } from '@kit.BasicServicesKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { common } from '@kit.AbilityKit';
@@ -24,14 +25,12 @@ struct ImagePreviewPage {
   @State images: string[] = [];
   @State currentIndex: number = 0;
 
-  // 帖子的相关状态
   private postId: string = '';
   @State isPostLiked: boolean = false;
 
   @State toastText: string = '';
   @State isSaving: boolean = false;
 
-  // 用于控制当前图片的缩放和拖拽
   @State currentScale: number = 1;
   @State lastScale: number = 1;
   @State offsetX: number = 0;
@@ -39,10 +38,7 @@ struct ImagePreviewPage {
   @State lastOffsetX: number = 0;
   @State lastOffsetY: number = 0;
 
-  // 控制 UI 栏的显示与隐藏
   @State showBars: boolean = true;
-
-  // 控制保存弹窗
   @State showSaveDialog: boolean = false;
 
   private context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
@@ -70,9 +66,6 @@ struct ImagePreviewPage {
     router.back();
   }
 
-  /**
-   * 点赞当前所属的帖子
-   */
   private async togglePostLike(): Promise<void> {
     if (!this.postId) {
       this.showToast('帖子信息缺失');
@@ -98,8 +91,58 @@ struct ImagePreviewPage {
   }
 
   /**
+   * 从URL中提取文件扩展名
+   */
+  private getFileExtension(url: string): string {
+    try {
+      // 去掉查询参数
+      const cleanUrl: string = url.split('?')[0];
+      const lastDot: number = cleanUrl.lastIndexOf('.');
+      if (lastDot !== -1) {
+        const ext: string = cleanUrl.substring(lastDot + 1).toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic'].includes(ext)) {
+          return ext;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return 'jpg';
+  }
+
+  /**
+   * 使用 request.downloadFile 下载图片到沙箱（无大小限制）
+   */
+  private downloadToSandbox(url: string, savePath: string): Promise<void> {
+    return new Promise<void>((resolve: (value: void) => void, reject: (reason: Error) => void) => {
+      // savePath 需要是相对于沙箱 cacheDir 的文件名
+      const fileName: string = savePath.substring(savePath.lastIndexOf('/') + 1);
+
+      const downloadConfig: request.DownloadConfig = {
+        url: url,
+        filePath: `${this.context.cacheDir}/${fileName}`,
+        enableMetered: true,
+        enableRoaming: true,
+        title: 'image_download'
+      };
+
+      request.downloadFile(this.context, downloadConfig)
+        .then((downloadTask: request.DownloadTask) => {
+          downloadTask.on('complete', () => {
+            resolve();
+          });
+          downloadTask.on('fail', (err: number) => {
+            reject(new Error(`下载失败，错误码: ${err}`));
+          });
+        })
+        .catch((err: BusinessError) => {
+          reject(new Error(`创建下载任务失败: ${err.message}`));
+        });
+    });
+  }
+
+  /**
    * 实际保存逻辑 - 必须在 SaveButton 的 onClick 回调链内调用
-   * 此时系统已临时授予 WRITE_IMAGEVIDEO 权限
    */
   private async doSaveImage(): Promise<void> {
     if (this.images.length === 0 || this.isSaving) {
@@ -110,36 +153,42 @@ struct ImagePreviewPage {
     const currentUrl: string = this.images[this.currentIndex];
 
     try {
-      this.showToast('正在保存...');
+      this.showToast('正在下载...');
 
-      // 1. 下载图片二进制数据
-      const httpRequest: http.HttpRequest = http.createHttp();
-      const response: http.HttpResponse = await httpRequest.request(currentUrl, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER
-      });
-      httpRequest.destroy();
+      const ext: string = this.getFileExtension(currentUrl);
+      const fileName: string = `TraQuick_${Date.now()}.${ext}`;
+      const tempFilePath: string = `${this.context.cacheDir}/${fileName}`;
 
-      if (response.responseCode !== 200) {
-        throw new Error('下载图片失败');
-      }
+      // 1. 使用 downloadFile 下载到沙箱（无大小限制）
+      await this.downloadToSandbox(currentUrl, tempFilePath);
 
-      const arrayBuffer: ArrayBuffer = response.result as ArrayBuffer;
+      this.showToast('正在保存到相册...');
 
-      // 2. 使用 photoAccessHelper 创建相册资源
-      // 在 SaveButton onClick 回调链中调用，系统已临时授权
+      // 2. 读取沙箱文件内容
+      const srcFile: fs.File = fs.openSync(tempFilePath, fs.OpenMode.READ_ONLY);
+      const stat: fs.Stat = fs.statSync(tempFilePath);
+      const fileSize: number = stat.size;
+      const arrayBuffer: ArrayBuffer = new ArrayBuffer(fileSize);
+      fs.readSync(srcFile.fd, arrayBuffer);
+      fs.closeSync(srcFile);
+
+      // 3. 使用 photoAccessHelper 创建相册资源（SaveButton 已授权）
       const helper: photoAccessHelper.PhotoAccessHelper =
         photoAccessHelper.getPhotoAccessHelper(this.context);
 
+      const photoExt: string = (ext === 'jpeg') ? 'jpg' : ext;
       const assetUri: string = await helper.createAsset(
         photoAccessHelper.PhotoType.IMAGE,
-        'jpg'
+        photoExt
       );
 
-      // 3. 将二进制数据写入相册文件
-      const file: fs.File = fs.openSync(assetUri, fs.OpenMode.READ_WRITE);
-      fs.writeSync(file.fd, arrayBuffer);
-      fs.closeSync(file);
+      // 4. 将数据写入相册
+      const assetFile: fs.File = fs.openSync(assetUri, fs.OpenMode.READ_WRITE);
+      fs.writeSync(assetFile.fd, arrayBuffer);
+      fs.closeSync(assetFile);
+
+      // 5. 清理沙箱临时文件
+      fs.unlinkSync(tempFilePath);
 
       this.showToast('已保存到系统相册');
       this.showSaveDialog = false;
@@ -297,7 +346,6 @@ struct ImagePreviewPage {
               .fontColor('#64748B')
               .margin({ bottom: 24 })
 
-            // SaveButton 安全组件 - 系统级授权，无需权限声明
             SaveButton({
               icon: SaveIconStyle.FULL_FILLED,
               text: SaveDescription.SAVE_IMAGE,
@@ -318,6 +366,7 @@ struct ImagePreviewPage {
               .fontSize(14)
               .fontColor('#64748B')
               .margin({ top: 16 })
+              .padding(8)
               .onClick(() => {
                 this.showSaveDialog = false;
               })
@@ -344,7 +393,7 @@ struct ImagePreviewPage {
         })
       }
 
-      // 5. Toast 提示
+      // 5. Toast
       if (this.toastText) {
         Column() {
           Text(this.toastText)
@@ -401,7 +450,6 @@ struct ImagePreviewPage {
   @Builder
   BottomBar() {
     Row() {
-      // 点赞帖子按钮
       Row() {
         Column() {
           Text(this.isPostLiked ? '❤️' : '🤍').fontSize(22)
@@ -419,7 +467,6 @@ struct ImagePreviewPage {
       }
       .onClick(() => this.togglePostLike())
 
-      // 保存图片按钮 - 点击弹出 SaveButton 弹窗
       Row() {
         Column() {
           if (this.isSaving) {
@@ -440,7 +487,6 @@ struct ImagePreviewPage {
           .margin({ left: 8 })
       }
       .onClick(() => {
-        // 弹出包含 SaveButton 的弹窗
         this.showSaveDialog = true;
       })
     }
