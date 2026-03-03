@@ -96,9 +96,6 @@ struct LoginPage {
               .margin({ bottom: 10, left: 4 })
 
             Row() {
-              Text('📧')
-                .fontSize(18)
-                .margin({ right: 12 })
 
               TextInput({ placeholder: '请输入邮箱', text: this.account })
                 .layoutWeight(1)
@@ -131,9 +128,6 @@ struct LoginPage {
               .margin({ bottom: 10, left: 4 })
 
             Row() {
-              Text('🔒')
-                .fontSize(18)
-                .margin({ right: 12 })
 
               TextInput({ placeholder: '请输入密码', text: this.password })
                 .layoutWeight(1)
@@ -146,13 +140,6 @@ struct LoginPage {
                 .onChange((value: string) => {
                   this.password = value;
                   this.errorMessage = '';
-                })
-
-              Text(this.isPasswordVisible ? '👁️' : '🙈')
-                .fontSize(18)
-                .opacity(0.6)
-                .onClick(() => {
-                  this.isPasswordVisible = !this.isPasswordVisible;
                 })
             }
             .width('100%')
