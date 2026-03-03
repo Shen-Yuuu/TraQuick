@@ -1,13 +1,15 @@
 /**
  * 图片预览页 - 全屏滑动查看 (支持点赞联动与保存相册)
+ * 使用 SaveButton 安全组件保存图片，无需申请 WRITE_IMAGEVIDEO 权限
  */
 
-import { router, promptAction } from '@kit.ArkUI';
+import { router } from '@kit.ArkUI';
 import { ApiService } from '../../services/ApiService';
 import { http } from '@kit.NetworkKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { common } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 class ImagePreviewParams {
   images?: string[];
@@ -24,10 +26,10 @@ struct ImagePreviewPage {
 
   // 帖子的相关状态
   private postId: string = '';
-  @State isPostLiked: boolean = false; // 代表整个帖子的点赞状态
+  @State isPostLiked: boolean = false;
 
   @State toastText: string = '';
-  @State isSaving: boolean = false; // 防抖
+  @State isSaving: boolean = false;
 
   // 用于控制当前图片的缩放和拖拽
   @State currentScale: number = 1;
@@ -40,10 +42,13 @@ struct ImagePreviewPage {
   // 控制 UI 栏的显示与隐藏
   @State showBars: boolean = true;
 
-  private context = getContext(this) as common.UIAbilityContext;
+  // 控制保存弹窗
+  @State showSaveDialog: boolean = false;
+
+  private context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
 
   aboutToAppear(): void {
-    const params = router.getParams() as ImagePreviewParams;
+    const params: ImagePreviewParams = router.getParams() as ImagePreviewParams;
     if (params) {
       this.postId = params.postId || '';
 
@@ -55,8 +60,8 @@ struct ImagePreviewPage {
         this.images = params.images.slice();
       }
 
-      const indexParam = params.imageIndex !== undefined ? Number(params.imageIndex) : 0;
-      const safeIndex = Math.min(Math.max(indexParam, 0), Math.max(this.images.length - 1, 0));
+      const indexParam: number = params.imageIndex !== undefined ? Number(params.imageIndex) : 0;
+      const safeIndex: number = Math.min(Math.max(indexParam, 0), Math.max(this.images.length - 1, 0));
       this.currentIndex = safeIndex;
     }
   }
@@ -74,33 +79,29 @@ struct ImagePreviewPage {
       return;
     }
 
-    const wasLiked = this.isPostLiked;
-    // 1. 乐观更新当前页 UI
+    const wasLiked: boolean = this.isPostLiked;
     this.isPostLiked = !wasLiked;
 
-    // 2. 触发全局通知，让底层的详情页/列表页同步刷新
-    // 我们复用之前设计的 communityPostUpdate 通道，只传必要状态
-    const trigger = AppStorage.get<number>('communityRefreshTrigger') || 0;
+    const trigger: number = AppStorage.get<number>('communityRefreshTrigger') || 0;
     AppStorage.setOrCreate('communityRefreshTrigger', trigger + 1);
 
     try {
-      // 3. 调接口
       if (wasLiked) {
         await ApiService.unlikePost(this.postId);
       } else {
         await ApiService.likePost(this.postId);
       }
     } catch (error) {
-      // 4. 回滚
       this.isPostLiked = wasLiked;
       this.showToast('点赞失败');
     }
   }
 
   /**
-   * 保存当前图片到本地相册
+   * 实际保存逻辑 - 必须在 SaveButton 的 onClick 回调链内调用
+   * 此时系统已临时授予 WRITE_IMAGEVIDEO 权限
    */
-  private async saveImage(): Promise<void> {
+  private async doSaveImage(): Promise<void> {
     if (this.images.length === 0 || this.isSaving) {
       return;
     }
@@ -125,44 +126,27 @@ struct ImagePreviewPage {
 
       const arrayBuffer: ArrayBuffer = response.result as ArrayBuffer;
 
-      // 2. 先写入沙箱临时文件
-      const fileName: string = `TraQuick_${Date.now()}.jpg`;
-      const cacheDir: string = this.context.cacheDir;
-      const tempFilePath: string = `${cacheDir}/${fileName}`;
-
-      const tempFile: fs.File = fs.openSync(tempFilePath, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
-      fs.writeSync(tempFile.fd, arrayBuffer);
-      fs.closeSync(tempFile);
-
-      // 3. 使用 phAccessHelper 创建相册资源并写入
-      const phAccessHelper: photoAccessHelper.PhotoAccessHelper =
+      // 2. 使用 photoAccessHelper 创建相册资源
+      // 在 SaveButton onClick 回调链中调用，系统已临时授权
+      const helper: photoAccessHelper.PhotoAccessHelper =
         photoAccessHelper.getPhotoAccessHelper(this.context);
 
-      // 使用 createAsset 的双参数重载，返回 string（uri）
-      const assetUri: string = await phAccessHelper.createAsset(
+      const assetUri: string = await helper.createAsset(
         photoAccessHelper.PhotoType.IMAGE,
         'jpg'
       );
 
-      // 4. 将沙箱临时文件内容写入相册 URI
-      const assetFile: fs.File = fs.openSync(assetUri, fs.OpenMode.READ_WRITE);
-      const srcFile: fs.File = fs.openSync(tempFilePath, fs.OpenMode.READ_ONLY);
-
-      const bufSize: number = arrayBuffer.byteLength;
-      const buf: ArrayBuffer = new ArrayBuffer(bufSize);
-      const readLen: number = fs.readSync(srcFile.fd, buf);
-      fs.writeSync(assetFile.fd, buf, { length: readLen });
-
-      fs.closeSync(srcFile);
-      fs.closeSync(assetFile);
-
-      // 5. 删除临时文件
-      fs.unlinkSync(tempFilePath);
+      // 3. 将二进制数据写入相册文件
+      const file: fs.File = fs.openSync(assetUri, fs.OpenMode.READ_WRITE);
+      fs.writeSync(file.fd, arrayBuffer);
+      fs.closeSync(file);
 
       this.showToast('已保存到系统相册');
+      this.showSaveDialog = false;
+
     } catch (error) {
-      const errMsg: string = (error as Error).message || '未知错误';
-      console.error(`[ImagePreview] 保存图片失败: ${errMsg}`);
+      const businessError: BusinessError = error as BusinessError;
+      console.error(`[ImagePreview] 保存图片失败, code: ${businessError.code}, msg: ${businessError.message}`);
       this.showToast('保存失败');
     } finally {
       this.isSaving = false;
@@ -197,8 +181,12 @@ struct ImagePreviewPage {
                   .width('100%')
                   .height('100%')
                   .objectFit(ImageFit.Contain)
-                  .scale(this.currentIndex === index ? { x: this.currentScale, y: this.currentScale } : { x: 1, y: 1 })
-                  .translate(this.currentIndex === index ? { x: this.offsetX, y: this.offsetY } : { x: 0, y: 0 })
+                  .scale(this.currentIndex === index
+                    ? { x: this.currentScale, y: this.currentScale }
+                    : { x: 1, y: 1 })
+                  .translate(this.currentIndex === index
+                    ? { x: this.offsetX, y: this.offsetY }
+                    : { x: 0, y: 0 })
               }
               .width('100%')
               .height('100%')
@@ -240,15 +228,18 @@ struct ImagePreviewPage {
                     }),
                   TapGesture({ count: 2 })
                     .onAction(() => {
-                      // ⚠️ 修复：双击全屏图片，统一执行“点赞该帖子”
                       if (!this.isPostLiked) {
                         this.togglePostLike();
                       }
-                      animateTo({ duration: 300 }, () => { this.resetGestureState(); });
+                      animateTo({ duration: 300 }, () => {
+                        this.resetGestureState();
+                      });
                     }),
                   TapGesture({ count: 1 })
                     .onAction(() => {
-                      animateTo({ duration: 200 }, () => { this.showBars = !this.showBars; });
+                      animateTo({ duration: 200 }, () => {
+                        this.showBars = !this.showBars;
+                      });
                     })
                 )
               )
@@ -264,7 +255,9 @@ struct ImagePreviewPage {
             this.resetGestureState();
           })
         } else {
-          Column() { Text('图片加载中...').fontSize(14).fontColor('#94A3B8') }.layoutWeight(1).justifyContent(FlexAlign.Center)
+          Column() {
+            Text('图片加载中...').fontSize(14).fontColor('#94A3B8')
+          }.layoutWeight(1).justifyContent(FlexAlign.Center)
         }
       }
       .width('100%')
@@ -272,15 +265,86 @@ struct ImagePreviewPage {
 
       // 2. 顶栏
       if (this.showBars) {
-        Column() { this.TopBar() }.position({ x: 0, y: 0 }).transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        Column() {
+          this.TopBar()
+        }
+        .position({ x: 0, y: 0 })
+        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
       }
 
       // 3. 底栏
       if (this.showBars) {
-        Column() { this.BottomBar() }.position({ x: 0, y: '100%' }).translate({ y: '-100%' }).transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+        Column() {
+          this.BottomBar()
+        }
+        .position({ x: 0, y: '100%' })
+        .translate({ y: '-100%' })
+        .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
       }
 
-      // 4. Toast 提示
+      // 4. 保存弹窗 - 包含 SaveButton 安全组件
+      if (this.showSaveDialog) {
+        Column() {
+          Column() {
+            Text('保存图片到相册')
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1E293B')
+              .margin({ bottom: 8 })
+
+            Text('点击下方按钮确认保存')
+              .fontSize(14)
+              .fontColor('#64748B')
+              .margin({ bottom: 24 })
+
+            // SaveButton 安全组件 - 系统级授权，无需权限声明
+            SaveButton({
+              icon: SaveIconStyle.FULL_FILLED,
+              text: SaveDescription.SAVE_IMAGE,
+              buttonType: ButtonType.Capsule
+            })
+              .width(200)
+              .height(44)
+              .onClick(async (_event: ClickEvent, result: SaveButtonOnClickResult) => {
+                if (result === SaveButtonOnClickResult.SUCCESS) {
+                  await this.doSaveImage();
+                } else {
+                  this.showToast('授权失败，无法保存');
+                  this.showSaveDialog = false;
+                }
+              })
+
+            Text('取消')
+              .fontSize(14)
+              .fontColor('#64748B')
+              .margin({ top: 16 })
+              .onClick(() => {
+                this.showSaveDialog = false;
+              })
+          }
+          .width('80%')
+          .padding(28)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(20)
+          .alignItems(HorizontalAlign.Center)
+          .shadow({
+            radius: 20,
+            color: 'rgba(0,0,0,0.15)',
+            offsetX: 0,
+            offsetY: 4
+          })
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .onClick(() => {
+          this.showSaveDialog = false;
+        })
+      }
+
+      // 5. Toast 提示
       if (this.toastText) {
         Column() {
           Text(this.toastText)
@@ -306,20 +370,32 @@ struct ImagePreviewPage {
   @Builder
   TopBar() {
     Row() {
-      Row() { Text('←').fontSize(28).fontColor('#FFFFFF').fontWeight(FontWeight.Medium) }
-      .width(44).height(44).justifyContent(FlexAlign.Center).onClick(() => this.goBack())
+      Row() {
+        Text('←').fontSize(28).fontColor('#FFFFFF').fontWeight(FontWeight.Medium)
+      }
+      .width(44)
+      .height(44)
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => this.goBack())
 
       Blank()
 
       Text(`${this.currentIndex + 1} / ${Math.max(this.images.length, 1)}`)
-        .fontSize(16).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).letterSpacing(2)
+        .fontSize(16)
+        .fontColor('#FFFFFF')
+        .fontWeight(FontWeight.Bold)
+        .letterSpacing(2)
 
       Blank()
 
       Row().width(44).height(44)
     }
-    .width('100%').padding({ left: 8, right: 8, top: 48, bottom: 12 })
-    .linearGradient({ direction: GradientDirection.Bottom, colors: [['rgba(0,0,0,0.5)', 0], ['transparent', 1]] })
+    .width('100%')
+    .padding({ left: 8, right: 8, top: 48, bottom: 12 })
+    .linearGradient({
+      direction: GradientDirection.Bottom,
+      colors: [['rgba(0,0,0,0.5)', 0], ['transparent', 1]]
+    })
   }
 
   @Builder
@@ -330,13 +406,20 @@ struct ImagePreviewPage {
         Column() {
           Text(this.isPostLiked ? '❤️' : '🤍').fontSize(22)
         }
-        .width(44).height(44).backgroundColor('rgba(255,255,255,0.15)').borderRadius(22).justifyContent(FlexAlign.Center)
+        .width(44)
+        .height(44)
+        .backgroundColor('rgba(255,255,255,0.15)')
+        .borderRadius(22)
+        .justifyContent(FlexAlign.Center)
 
-        Text(this.isPostLiked ? '已喜欢' : '喜欢').fontSize(13).fontColor('#FFFFFF').margin({ left: 8 })
+        Text(this.isPostLiked ? '已喜欢' : '喜欢')
+          .fontSize(13)
+          .fontColor('#FFFFFF')
+          .margin({ left: 8 })
       }
       .onClick(() => this.togglePostLike())
 
-      // 保存图片按钮
+      // 保存图片按钮 - 点击弹出 SaveButton 弹窗
       Row() {
         Column() {
           if (this.isSaving) {
@@ -345,14 +428,28 @@ struct ImagePreviewPage {
             Text('⬇️').fontSize(20)
           }
         }
-        .width(44).height(44).backgroundColor('rgba(255,255,255,0.15)').borderRadius(22).justifyContent(FlexAlign.Center)
+        .width(44)
+        .height(44)
+        .backgroundColor('rgba(255,255,255,0.15)')
+        .borderRadius(22)
+        .justifyContent(FlexAlign.Center)
 
-        Text('保存').fontSize(13).fontColor('#FFFFFF').margin({ left: 8 })
+        Text('保存')
+          .fontSize(13)
+          .fontColor('#FFFFFF')
+          .margin({ left: 8 })
       }
-      .onClick(() => this.saveImage())
+      .onClick(() => {
+        // 弹出包含 SaveButton 的弹窗
+        this.showSaveDialog = true;
+      })
     }
-    .width('100%').padding({ left: 32, right: 32, top: 20, bottom: 40 })
+    .width('100%')
+    .padding({ left: 32, right: 32, top: 20, bottom: 40 })
     .justifyContent(FlexAlign.SpaceBetween)
-    .linearGradient({ direction: GradientDirection.Top, colors: [['rgba(0,0,0,0.5)', 0], ['transparent', 1]] })
+    .linearGradient({
+      direction: GradientDirection.Top,
+      colors: [['rgba(0,0,0,0.5)', 0], ['transparent', 1]]
+    })
   }
 }
