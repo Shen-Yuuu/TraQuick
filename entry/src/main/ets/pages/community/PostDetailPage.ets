@@ -156,7 +156,7 @@ struct PostDetailPage {
     if (!this.post) return;
     router.pushUrl({
       url: 'pages/community/ImagePreviewPage',
-      params: { postId: this.post.id, imageIndex: index }
+      params: { postId: this.post.id, imageIndex: index,isLiked: this.isLiked }
     }).catch(() => {});
   }
 

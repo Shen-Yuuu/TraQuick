@@ -390,7 +390,7 @@ export struct CommunityPage {
   private openImagePreview(post: Post, imageIndex: number): void {
     router.pushUrl({
       url: 'pages/community/ImagePreviewPage',
-      params: { postId: post.id, images: post.images, imageIndex: imageIndex }
+      params: { postId: post.id, images: post.images, imageIndex: imageIndex,isLiked: post.isLiked }
     }).catch(() => {});
   }
 
