@@ -8,6 +8,81 @@ import { ApiService, CreatePostParams } from '../../services/ApiService';
 import { common } from '@kit.AbilityKit';
 import { LocationService, LocationInfo } from '../../utils/LocationService'; // 👈 引入新写的工具类
 
+// ==================== 话题标签输入弹窗 ====================
+@CustomDialog
+struct TagInputDialog {
+  controller: CustomDialogController
+  @State inputValue: string = ''
+  onConfirm: (tag: string) => void = () => {}
+
+  build() {
+    Column() {
+      Text('添加话题')
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#1E293B')
+        .margin({ top: 24, bottom: 16 })
+
+      Row() {
+        // 固定的不可编辑的灰色 # 号
+        Text('#')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#94A3B8')
+          .margin({ left: 16, right: 4 })
+
+        // 用户输入框
+        TextInput({ placeholder: '输入话题名称', text: this.inputValue })
+          .layoutWeight(1)
+          .height(48)
+          .backgroundColor('transparent')
+          .fontSize(16)
+          .fontColor('#1E293B')
+          .placeholderColor('#CBD5E1')
+          .maxLength(15) // 限制话题长度
+          .onChange((value: string) => {
+            // 过滤空格
+            this.inputValue = value.trim();
+          })
+      }
+      .width('90%')
+      .backgroundColor('#F1F5F9')
+      .borderRadius(12)
+      .margin({ bottom: 24 })
+
+      Row() {
+        Text('取消')
+          .fontSize(16)
+          .fontColor('#64748B')
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+          .onClick(() => { this.controller.close() })
+
+        Column().width(1).height(24).backgroundColor('#E2E8F0')
+
+        Text('添加')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.inputValue.length > 0 ? '#38BDF8' : '#CBD5E1')
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+          .onClick(() => {
+            if (this.inputValue.length > 0) {
+              this.onConfirm(this.inputValue);
+              this.controller.close();
+            }
+          })
+      }
+      .width('100%')
+      .height(50)
+      .border({ width: { top: 1 }, color: '#F1F5F9' })
+    }
+    .backgroundColor('#FFFFFF')
+    .borderRadius(16)
+    .width('80%')
+  }
+}
+
 @Entry
 @Component
 struct PublishPostPage {
@@ -21,7 +96,7 @@ struct PublishPostPage {
   @State longitude: number = 0;
   @State isLocating: boolean = true;
 
-  @State selectedTopic: string = '旅行日记'; // 去掉前面的#，方便传给后端
+  @State selectedTags: string[] = [];
   @State postVisibility: string = '公开';
   @State isPublishing: boolean = false;
   @State errorMessage: string = '';
@@ -29,6 +104,25 @@ struct PublishPostPage {
 
   private readonly MAX_IMAGE_COUNT: number = 9;
   private context = getContext(this) as common.UIAbilityContext;
+
+  tagDialogController: CustomDialogController = new CustomDialogController({
+    builder: TagInputDialog({
+      onConfirm: (tag: string) => {
+        // 去重判断
+        if (!this.selectedTags.includes(tag)) {
+          if (this.selectedTags.length >= 5) {
+            promptAction.showToast({ message: '最多添加5个话题' });
+          } else {
+            this.selectedTags.push(tag);
+          }
+        } else {
+          promptAction.showToast({ message: '话题已存在' });
+        }
+      }
+    }),
+    autoCancel: true,
+    alignment: DialogAlignment.Center
+  });
 
   aboutToAppear(): void {
     // 进入页面时自动尝试获取定位
@@ -57,8 +151,9 @@ struct PublishPostPage {
       this.longitude = locInfo.longitude;
 
       try {
-        // 去掉市/省等后缀
-        const searchKeyword = this.cityName.replace(/市|省|区/g, '');
+
+        const searchKeyword = this.cityName.split(' · ')[0].replace(/市|省|区/g, '');
+        console.log(searchKeyword);
         const cities = await ApiService.getCities(searchKeyword);
         if (cities && cities.length > 0) {
           this.matchedCityId = cities[0].id; // 匹配成功，存下 UUID
@@ -133,20 +228,16 @@ struct PublishPostPage {
         }
       }
 
-      // 2. 构造后端需要的参数
-      const tags: string[] = [];
-      if (this.selectedTopic) {
-        tags.push(this.selectedTopic);
-      }
-
       const postParams = new CreatePostParams();
       postParams.content = this.content;
       postParams.images = uploadedUrls;
       postParams.type = 'image';
-      postParams.tags = tags;
+      postParams.tags = this.selectedTags;
 
       if (this.matchedCityId) {
         postParams.cityId = this.matchedCityId;
+      }else if (this.cityName !== '获取位置中...' && this.cityName !== '定位失败' && this.cityName !== '定位未授权') {
+        postParams.cityName = this.cityName;
       }
 
       // 传入真实定位
@@ -264,11 +355,68 @@ struct PublishPostPage {
           Divider().color('#F1F5F9')
 
           // ====== 话题标签 ======
-          Row() {
-            Column() { Text('#').fontSize(18).fontWeight(FontWeight.Bold).fontColor('#38BDF8') }.width(40).height(40).backgroundColor('#E0F2FE').borderRadius(12).justifyContent(FlexAlign.Center)
-            Text('添加话题').fontSize(15).fontColor('#64748B').margin({ left: 12 }).layoutWeight(1)
-            Text(`#${this.selectedTopic}`).fontSize(13).fontColor('#38BDF8').padding({ left: 12, right: 12, top: 6, bottom: 6 }).backgroundColor('#E0F2FE').borderRadius(12).margin({ right: 12 })
-          }.width('100%').padding({ left: 20, right: 20, top: 16, bottom: 16 })
+          Column() {
+            Row() {
+              Column() { Text('#').fontSize(18).fontWeight(FontWeight.Bold).fontColor('#38BDF8') }
+              .width(40).height(40).backgroundColor('#E0F2FE').borderRadius(12).justifyContent(FlexAlign.Center)
+              Text('添加话题').fontSize(15).fontColor('#64748B').margin({ left: 12 }).layoutWeight(1)
+            }
+            .width('100%')
+            .margin({ bottom: 12 })
+
+            // 动态流式布局展示 Tags
+            Flex({ wrap: FlexWrap.Wrap }) {
+              // 遍历已选择的 Tag
+              ForEach(this.selectedTags, (tag: string, index: number) => {
+                Row() {
+                  Text(`# ${tag}`)
+                    .fontSize(13)
+                    .fontColor('#FFFFFF') // 蓝色背景，白色字体，更突出
+
+                  // 删除按钮
+                  Text('✕')
+                    .fontSize(10)
+                    .fontColor('#FFFFFF')
+                    .opacity(0.8)
+                    .margin({ left: 6 })
+                }
+                .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                .backgroundColor('#38BDF8') // 蓝色背景
+                .borderRadius(16)
+                .margin({ right: 8, bottom: 8 })
+                .onClick(() => {
+                  // 点击删除该 Tag
+                  const newTags = [...this.selectedTags];
+                  newTags.splice(index, 1);
+                  this.selectedTags = newTags;
+                })
+              }, (tag: string) => tag)
+
+              // 添加按钮 (+)
+              if (this.selectedTags.length < 5) { // 限制最多5个
+                Row() {
+                  Text('+')
+                    .fontSize(16)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#38BDF8')
+                  Text('话题')
+                    .fontSize(13)
+                    .fontColor('#38BDF8')
+                    .margin({ left: 4 })
+                }
+                .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                .backgroundColor('#E0F2FE')
+                .borderRadius(16)
+                .margin({ bottom: 8 })
+                .onClick(() => {
+                  this.tagDialogController.open();
+                })
+              }
+            }
+            .width('100%')
+          }
+          .width('100%')
+          .padding({ left: 20, right: 20, top: 16, bottom: 16 })
 
           Divider().color('#F1F5F9')
 

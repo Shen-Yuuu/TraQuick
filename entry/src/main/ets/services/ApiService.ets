@@ -4,7 +4,7 @@
 import { http } from '@kit.NetworkKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 
-const BASE_URL: string = 'http://192.168.71.2:3000/api';
+const BASE_URL: string = 'http://10.25.88.111:3000/api';
 
 // ==================== 数据结构定义（全部用 class） ====================
 
@@ -266,6 +266,7 @@ export class CreatePostParams {
   latitude: number = 0;
   longitude: number = 0;
   cityId: string = '';
+  cityName?: string = undefined;
 }
 
 export class CreateCommentParams {
@@ -564,6 +565,9 @@ class ApiServiceClass {
     if (params.cityId && params.cityId.length > 0) {
       body['cityId'] = params.cityId;
     }
+    else if(params.cityName && params.cityName.length > 0) {
+      body['cityName'] = params.cityName;
+    }
 
     return await this.post<ApiPost>('/posts', body, true);
   }
@@ -676,7 +680,7 @@ class ApiServiceClass {
    * 获取所有城市列表（探索页随机抽选用）或根据关键字搜索
    */
   async getCities(keyword: string = ''): Promise<ApiCity[]> {
-    const query = keyword ? `?keyword=${keyword}` : '';
+    const query = keyword ? `?keyword=${encodeURIComponent(keyword)}` : '';
     return await this.get<ApiCity[]>(`/cities${query}`, true);
   }
 
