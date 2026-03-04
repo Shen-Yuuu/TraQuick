@@ -6,6 +6,7 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { ApiService, ApiPost, CommentListData, ApiComment, CreateCommentParams, CollectResult, LikeResult } from '../../services/ApiService';
 import { Post, PostComment, PostAuthor, PostLocation, CommentReply,PostUpdateInfo } from '../../models/Post';
+import { emitter } from '@kit.BasicServicesKit';
 
 @Entry
 @Component
@@ -141,6 +142,7 @@ struct PostDetailPage {
 
       // 写入 AppStorage (转为 JSON 字符串以避免引用传递问题)
       AppStorage.setOrCreate('communityPostUpdate', JSON.stringify(updateInfo));
+      emitter.emit({ eventId: 1001 });
     }
     router.back();
   }

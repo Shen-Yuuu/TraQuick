@@ -7,6 +7,7 @@ import { ApiService, ApiPost, UserProfileData, PaginatedPosts, UpdateProfilePara
 import { Post, PostAuthor, PostLocation } from '../../models/Post';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { common } from '@kit.AbilityKit';
+import { emitter } from '@kit.BasicServicesKit';
 
 interface BadgeItem {
   icon: string;
@@ -93,11 +94,20 @@ export struct ProfilePage {
     { icon: '⚙️', title: '设置', value: '', route: 'pages/profile/SettingsPage' },
   ];
 
+  private readonly REFRESH_PROFILE_EVENT_ID = 1001;
+
   aboutToAppear(): void {
     this.currentUserId = AppStorage.get<string>('currentUserId') || '';
     if (this.currentUserId) {
       this.loadMyProfile();
     }
+    emitter.on({ eventId: this.REFRESH_PROFILE_EVENT_ID }, (eventData: emitter.EventData) => {
+      this.loadMyProfile();
+    });
+  }
+
+  aboutToDisappear(): void {
+    emitter.off(this.REFRESH_PROFILE_EVENT_ID);
   }
 
   onPageShow(): void {
@@ -304,7 +314,7 @@ export struct ProfilePage {
     Stack() {
       // 1. 底层：沉浸式视差背景图
       if (this.coverImage) {
-        Image($r('app.media.img1'))
+        Image(this.coverImage)
           .width('100%')
           .height(350)
           .objectFit(ImageFit.Cover)
@@ -418,7 +428,7 @@ export struct ProfilePage {
 
         Column() {
           if (this.avatar) {
-            Image($r('app.media.img2')).width(76).height(76).borderRadius(38).objectFit(ImageFit.Cover)
+            Image(this.avatar).width(76).height(76).borderRadius(38).objectFit(ImageFit.Cover)
           } else {
             Text((this.nickname || '我').charAt(0)).fontSize(32).fontWeight(FontWeight.Bold).fontColor('#FFFFFF')
           }

@@ -2,6 +2,7 @@
 import { ApiService, ApiUser, UpdateProfileParams } from '../../services/ApiService';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { common } from '@kit.AbilityKit';
+import { emitter } from '@kit.BasicServicesKit';
 
 // ==================== 圆形裁剪预览弹窗 ====================
 @CustomDialog
@@ -186,6 +187,8 @@ struct EditProfilePage {
 
       await ApiService.updateProfile(params);
       AppStorage.setOrCreate('currentUserNickname', this.nickname);
+
+      emitter.emit({ eventId: 1001 });
 
       promptAction.showToast({ message: '保存成功' });
       router.back();
