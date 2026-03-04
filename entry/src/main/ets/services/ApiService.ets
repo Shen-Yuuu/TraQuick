@@ -653,7 +653,25 @@ class ApiServiceClass {
   }
 
   async updateProfile(params: UpdateProfileParams): Promise<ApiUser> {
-    return await this.put<ApiUser>('/users/me', params, true);
+    const body: Record<string, string> = {};
+
+    if (params.nickname && params.nickname.length > 0) {
+      body['nickname'] = params.nickname;
+    }
+
+    if (params.avatar && params.avatar.length > 0) {
+      body['avatar'] = params.avatar;
+    }
+
+    if (params.bio && params.bio.length > 0) {
+      body['bio'] = params.bio;
+    }
+
+    if (params.coverImage && params.coverImage.length > 0) {
+      body['coverImage'] = params.coverImage;
+    }
+
+    return await this.put<ApiUser>('/users/me', body, true);
   }
 
   async followUser(userId: string): Promise<FollowResult> {
