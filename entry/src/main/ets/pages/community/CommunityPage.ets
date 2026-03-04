@@ -26,7 +26,7 @@ export struct CommunityPage {
 
   private mainTabs: string[] = ['视频', '社区'];
   private subTabs: string[] = ['推荐', '关注', '朋友'];
-
+  private listScroller: Scroller = new Scroller();
   aboutToAppear(): void {
     // 初始化 AppStorage
     if (!AppStorage.has('communityPostUpdate')) {
@@ -540,6 +540,7 @@ export struct CommunityPage {
         .onClick(() => {
           if (this.currentSubTab !== index) {
             this.currentSubTab = index;
+            this.listScroller.scrollEdge(Edge.Top);
             this.loadPosts(true);
           }
         })
@@ -557,7 +558,7 @@ export struct CommunityPage {
   CommunityContent() {
     Stack() {
       Refresh({ refreshing: $$this.isRefreshing }) {
-        List() {
+        List({ scroller: this.listScroller }) {
           // 错误提示
           if (this.errorMessage) {
             ListItem() {
