@@ -10,10 +10,10 @@ import { User } from '../../models/User';
  * 分享面板用的简化用户信息
  * 调用方可以传入任意来源的用户列表（API / 本地缓存 / 关注列表等）
  */
-interface ShareTarget {
-  id: string;
-  nickname: string;
-  avatar?: string;
+export class ShareTarget {
+  id: string = '';
+  nickname: string = '';
+  avatar: string = '';
 }
 
 @Component

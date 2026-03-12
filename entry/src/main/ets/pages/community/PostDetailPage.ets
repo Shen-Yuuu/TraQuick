@@ -7,7 +7,13 @@ import { router, promptAction } from '@kit.ArkUI';
 import { ApiService, ApiPost, CommentListData, ApiComment, CreateCommentParams, CollectResult, LikeResult } from '../../services/ApiService';
 import { Post, PostComment, PostAuthor, PostLocation, CommentReply,PostUpdateInfo } from '../../models/Post';
 import { emitter } from '@kit.BasicServicesKit';
+import { SharePanel } from '../../components/common/SharePanel';
 
+export class DetailShareTarget {
+  id: string = '';
+  nickname: string = '';
+  avatar: string = '';
+}
 @Entry
 @Component
 struct PostDetailPage {
@@ -25,6 +31,7 @@ struct PostDetailPage {
   @State commentCount: number = 0;
   @State shareCount: number = 0;
   @State hasChanged: boolean = false; // 标记是否有数据变更
+  @State shareTargetsList: DetailShareTarget[] = [];
 
   // 新增：关注相关状态
   @State isFollowing: boolean = false;
@@ -243,6 +250,30 @@ struct PostDetailPage {
     }
   }
 
+  private async onShare(): Promise<void> {
+    if (!this.post) return;
+
+    if (this.shareTargetsList.length === 0 && this.currentUserId) {
+      try {
+        const result = await ApiService.getFollowingList(this.currentUserId, 1);
+        const mappedTargets: DetailShareTarget[] = [];
+
+        for (const user of result.items) {
+          const item = new DetailShareTarget();
+          item.id = user.id;
+          item.nickname = user.nickname;
+          item.avatar = user.avatar || '';
+          mappedTargets.push(item);
+        }
+        this.shareTargetsList = mappedTargets;
+      } catch (e) {
+        console.error('[PostDetail] 获取分享列表失败');
+      }
+    }
+
+    this.showSharePanel = true;
+  }
+
   private toggleCommentLike(commentId: string): void {
     const idx = this.comments.findIndex(c => c.id === commentId);
     if (idx !== -1) {
@@ -290,52 +321,79 @@ struct PostDetailPage {
   }
 
   build() {
-    Column() {
-      this.NavigationBar()
+    Stack() {
 
-      if (this.post) {
-        Scroll() {
-          Column() {
+      Column() {
+        this.NavigationBar()
+
+        if (this.post) {
+          Scroll() {
             Column() {
-              this.AuthorSection()
-              this.ContentSection()
-              if (this.post.images && this.post.images.length > 0) {
-                this.ImagesSection()
+              Column() {
+                this.AuthorSection()
+                this.ContentSection()
+                if (this.post.images && this.post.images.length > 0) {
+                  this.ImagesSection()
+                }
+                this.MetaSection()
+                this.InteractionBar()
               }
-              this.MetaSection()
-              this.InteractionBar()
-            }
-            .opacity(this.pageEnterAnim)
-            .translate({ y: (1 - this.pageEnterAnim) * 20 })
+              .opacity(this.pageEnterAnim)
+              .translate({ y: (1 - this.pageEnterAnim) * 20 })
 
-            Column() {
-              Divider().strokeWidth(8).color('#F1F5F9')
-              this.CommentsSection()
-            }
-            .opacity(this.commentAreaAnim)
-            .translate({ y: (1 - this.commentAreaAnim) * 30 })
+              Column() {
+                Divider().strokeWidth(8).color('#F1F5F9')
+                this.CommentsSection()
+              }
+              .opacity(this.commentAreaAnim)
+              .translate({ y: (1 - this.commentAreaAnim) * 30 })
 
-            Column().height(100)
+              Column().height(100)
+            }
+          }
+          .layoutWeight(1)
+          .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
+
+          this.CommentInputBar()
+        } else {
+          Column() {
+            LoadingProgress().width(40).height(40)
+            Text('加载中...').fontSize(14).fontColor('#94A3B8').margin({ top: 12 })
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+        }
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('#FFFFFF')
+
+      SharePanel({
+        isShow: this.showSharePanel,
+        shareTargets: this.shareTargetsList as any,
+        onClose: () => { this.showSharePanel = false; },
+        onShareToUser: async (targetUserId: string, text: string) => {
+          this.showSharePanel = false;
+          if (!this.post) return;
+
+          try {
+            await ApiService.sharePost(targetUserId, this.post.id, text);
+            promptAction.showToast({ message: '分享成功！' });
+
+            // 乐观更新分享数
+            this.shareCount += 1;
+            this.hasChanged = true;
+          } catch (e) {
+            promptAction.showToast({ message: '分享失败' });
           }
         }
-        .layoutWeight(1)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
+      })
 
-        this.CommentInputBar()
-      } else {
-        Column() {
-          LoadingProgress().width(40).height(40)
-          Text('加载中...').fontSize(14).fontColor('#94A3B8').margin({ top: 12 })
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-      }
-    }
+    } 
     .width('100%')
     .height('100%')
-    .backgroundColor('#FFFFFF')
   }
 
   @Builder
@@ -545,6 +603,7 @@ struct PostDetailPage {
           .margin({ top: 2 })
       }
       .alignItems(HorizontalAlign.Center)
+      .onClick(() => this.onShare())
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 16 })
@@ -733,6 +792,7 @@ struct PostDetailPage {
     .border({ width: { top: 0.5 }, color: '#F1F5F9' })
     .shadow({ radius: 8, color: 'rgba(0,0,0,0.04)', offsetY: -2 })
   }
+
 
   @Builder
   PostImageGrid(images: string[]) {

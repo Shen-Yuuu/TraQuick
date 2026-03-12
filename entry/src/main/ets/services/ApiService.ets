@@ -4,7 +4,7 @@
 import { http } from '@kit.NetworkKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 
-const BASE_URL: string = 'http://10.25.88.111:3000/api';
+const BASE_URL: string = 'http://192.168.71.2:3000/api';
 
 // ==================== 数据结构定义（全部用 class） ====================
 
@@ -179,6 +179,12 @@ export class ApiMessageGroup {
 
 export class MarkReadResult {
   count: number = 0;
+}
+
+export class SharePostParams {
+  targetUserId: string = '';
+  postId: string = '';
+  text: string = '';
 }
 
 // ------ City 相关 ------
@@ -765,6 +771,17 @@ class ApiServiceClass {
     return await this.put<MarkReadResult>(`/messages/read-all${query}`, undefined, true);
   }
 
+  /**
+   * 分享帖子给用户 (发送私信)
+   */
+  async sharePost(targetUserId: string, postId: string, text: string): Promise<MessageResult> {
+    const params = new SharePostParams();
+    params.targetUserId = targetUserId;
+    params.postId = postId;
+    params.text = text;
+
+    return await this.post<MessageResult>('/messages/share', params, true);
+  }
   // ============================================================
   // DriftBottle 接口
   // ============================================================

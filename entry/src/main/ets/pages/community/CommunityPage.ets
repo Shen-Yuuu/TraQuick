@@ -2,11 +2,17 @@
  * 社区页面 - 对接真实 API
  */
 
-import { router } from '@kit.ArkUI';
+import { promptAction, router } from '@kit.ArkUI';
 import { SharePanel } from '../../components/common/SharePanel';
 import { Post, PostAuthor, PostLocation, PostUpdateInfo } from '../../models/Post';
 import { ApiService, ApiPost, PaginatedPosts, LikeResult, CollectResult } from '../../services/ApiService';
 import { formatTime, formatCount } from '../../utils/Formatter';
+
+export class ShareTargetItem {
+  id: string = '';
+  nickname: string = '';
+  avatar: string = '';
+}
 
 @Component
 export struct CommunityPage {
@@ -23,6 +29,8 @@ export struct CommunityPage {
   @State showRefreshToast: boolean = false;
   @State toastMessage: string = '';
   @StorageLink('communityPostUpdate') @Watch('onPostUpdateChange') postUpdateJson: string = '';
+  @State shareTargetsList: ShareTargetItem[] = [];
+  @State currentUserId: string = '';
 
   private mainTabs: string[] = ['视频', '社区'];
   private subTabs: string[] = ['推荐', '关注', '朋友'];
@@ -32,6 +40,7 @@ export struct CommunityPage {
     if (!AppStorage.has('communityPostUpdate')) {
       AppStorage.setOrCreate('communityPostUpdate', '');
     }
+    this.currentUserId = AppStorage.get<string>('currentUserId') || '';
     this.loadPosts(true);
   }
 
@@ -382,8 +391,28 @@ export struct CommunityPage {
     }).catch(() => {});
   }
 
-  private onShare(post: Post): void {
+  private async onShare(post: Post): Promise<void> {
     this.sharePost = post;
+
+    // 如果列表为空，则从后端拉取一次“我关注的人”
+    if (this.shareTargetsList.length === 0 && this.currentUserId) {
+      try {
+        const result = await ApiService.getFollowingList(this.currentUserId, 1);
+        const mappedTargets: ShareTargetItem[] = [];
+
+        for (const user of result.items) {
+          const item = new ShareTargetItem();
+          item.id = user.id;
+          item.nickname = user.nickname;
+          item.avatar = user.avatar || '';
+          mappedTargets.push(item);
+        }
+        this.shareTargetsList = mappedTargets;
+      } catch (e) {
+        console.error('[Community] 获取分享列表失败');
+      }
+    }
+
     this.showSharePanel = true;
   }
 
@@ -467,11 +496,29 @@ export struct CommunityPage {
 
       SharePanel({
         isShow: this.showSharePanel,
-        // TODO: 对接 API 获取好友/关注列表作为分享目标
-        shareTargets: [],
+        shareTargets: this.shareTargetsList, // ⚠️ 传入刚才获取的真实列表
         onClose: () => { this.showSharePanel = false; },
-        onShareToUser: (userId: string, text: string) => {
+        onShareToUser: async (targetUserId: string, text: string) => {
           this.showSharePanel = false;
+          if (!this.sharePost) return;
+
+          try {
+            // ⚠️ 调用真实后端 API 发送分享
+            await ApiService.sharePost(targetUserId, this.sharePost.id, text);
+            promptAction.showToast({ message: '分享成功！' });
+
+            // 可选：前端乐观更新分享数
+            const idx = this.postList.findIndex(p => p.id === this.sharePost!.id);
+            if (idx !== -1) {
+              const updated = this.clonePost(this.postList[idx]);
+              updated.shareCount += 1;
+              const newList: Post[] = [];
+              for (let i=0; i<this.postList.length; i++) newList.push(i === idx ? updated : this.postList[i]);
+              this.postList = newList;
+            }
+          } catch (e) {
+            promptAction.showToast({ message: '分享失败' });
+          }
         }
       })
     }
