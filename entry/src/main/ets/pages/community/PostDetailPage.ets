@@ -7,7 +7,7 @@ import { router, promptAction } from '@kit.ArkUI';
 import { ApiService, ApiPost, CommentListData, ApiComment, CreateCommentParams, CollectResult, LikeResult } from '../../services/ApiService';
 import { Post, PostComment, PostAuthor, PostLocation, CommentReply,PostUpdateInfo } from '../../models/Post';
 import { emitter } from '@kit.BasicServicesKit';
-import { SharePanel } from '../../components/common/SharePanel';
+import { SharePanel, ShareTarget } from '../../components/common/SharePanel';
 
 export class DetailShareTarget {
   id: string = '';
@@ -31,8 +31,7 @@ struct PostDetailPage {
   @State commentCount: number = 0;
   @State shareCount: number = 0;
   @State hasChanged: boolean = false; // 标记是否有数据变更
-  @State shareTargetsList: DetailShareTarget[] = [];
-
+  @State shareTargetsList: ShareTarget[] = [];
   // 新增：关注相关状态
   @State isFollowing: boolean = false;
   @State isSelf: boolean = false;
@@ -256,10 +255,10 @@ struct PostDetailPage {
     if (this.shareTargetsList.length === 0 && this.currentUserId) {
       try {
         const result = await ApiService.getFollowingList(this.currentUserId, 1);
-        const mappedTargets: DetailShareTarget[] = [];
+        const mappedTargets: ShareTarget[] = [];
 
         for (const user of result.items) {
-          const item = new DetailShareTarget();
+          const item = new ShareTarget();
           item.id = user.id;
           item.nickname = user.nickname;
           item.avatar = user.avatar || '';
@@ -372,7 +371,7 @@ struct PostDetailPage {
 
       SharePanel({
         isShow: this.showSharePanel,
-        shareTargets: this.shareTargetsList as any,
+        shareTargets: this.shareTargetsList,
         onClose: () => { this.showSharePanel = false; },
         onShareToUser: async (targetUserId: string, text: string) => {
           this.showSharePanel = false;
