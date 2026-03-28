@@ -2,7 +2,7 @@
  * 注册页面 - 对接真实 API
  */
 import { router } from '@kit.ArkUI';
-import { ApiService, AuthData, RegisterParams } from '../../services/ApiService';
+import { authService } from '../../services/AuthService';
 
 @Entry
 @Component
@@ -252,21 +252,13 @@ struct RegisterPage {
     this.errorMessage = '';
 
     try {
-      const params = new RegisterParams();
-      params.email = this.email;
-      params.password = this.password;
-      params.nickname = this.nickname;
+      const result = await authService.register(this.email, this.password, this.nickname);
+      if (!result.success || !result.user) {
+        this.errorMessage = result.message || '注册失败，请重试';
+        return;
+      }
 
-      const result: AuthData = await ApiService.register(params);
-
-      // 注册成功后自动登录
-      AppStorage.setOrCreate('userToken', result.accessToken);
-      AppStorage.setOrCreate('currentUserId', result.user.id);
-      AppStorage.setOrCreate('currentUserNickname', result.user.nickname);
-      AppStorage.setOrCreate('currentUserAvatar', result.user.avatar);
       AppStorage.setOrCreate('currentUserEmail', result.user.email);
-      AppStorage.setOrCreate('isLoggedIn', true);
-
       console.info(`[Register] 注册成功: ${result.user.nickname}`);
 
       router.replaceUrl({ url: 'pages/Index' });

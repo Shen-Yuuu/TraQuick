@@ -2,7 +2,7 @@
  * 登录页面 - 对接真实 API
  */
 import { router } from '@kit.ArkUI';
-import { ApiService, AuthData, LoginParams } from '../../services/ApiService';
+import { authService } from '../../services/AuthService';
 import { promptAction } from '@kit.ArkUI';
 
 @Entry
@@ -273,21 +273,13 @@ struct LoginPage {
     this.errorMessage = '';
 
     try {
-      // 构造参数对象
-      const params = new LoginParams();
-      params.email = this.account;
-      params.password = this.password;
+      const result = await authService.loginWithPassword(this.account, this.password);
+      if (!result.success || !result.user) {
+        this.errorMessage = result.message || '登录失败，请检查邮箱和密码';
+        return;
+      }
 
-      const result: AuthData = await ApiService.login(params);
-
-      // 存储 Token 和用户信息
-      AppStorage.setOrCreate('userToken', result.accessToken);
-      AppStorage.setOrCreate('currentUserId', result.user.id);
-      AppStorage.setOrCreate('currentUserNickname', result.user.nickname);
-      AppStorage.setOrCreate('currentUserAvatar', result.user.avatar);
       AppStorage.setOrCreate('currentUserEmail', result.user.email);
-      AppStorage.setOrCreate('isLoggedIn', true);
-
       console.info(`[Login] 登录成功: ${result.user.nickname}`);
       router.replaceUrl({ url: 'pages/Index' });
 

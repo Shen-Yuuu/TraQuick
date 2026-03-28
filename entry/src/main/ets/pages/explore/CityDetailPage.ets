@@ -3,9 +3,11 @@
  */
 
 import { router, promptAction } from '@kit.ArkUI';
-import { Post, PostAuthor, PostLocation, PostComment } from '../../models/Post';
+import { Post, PostComment } from '../../models/Post';
 import { formatTime, formatCount } from '../../utils/Formatter';
 import { ApiService, ApiCity, PaginatedPosts, ApiPost, LikeResult, CollectResult } from '../../services/ApiService';
+import { mapApiPostToPost, clonePost } from '../../utils/PostMapper';
+import { ImageUtils } from '../../utils/ImageUtils';
 
 // ====== 数据类定义 ======
 class CityTabItem { title: string = ''; }
@@ -75,7 +77,7 @@ struct CityDetailPage {
       const postsData: PaginatedPosts = await ApiService.getPosts(1, 20, 'hot', '', this.cityId, '');
       const newPosts: Post[] = [];
       for (const apiPost of postsData.items) {
-        newPosts.push(this.convertApiPost(apiPost));
+        newPosts.push(mapApiPostToPost(apiPost));
       }
       this.cityPosts = newPosts;
 
@@ -117,42 +119,6 @@ struct CityDetailPage {
     }
   }
 
-  private convertApiPost(apiPost: ApiPost): Post {
-    const author: PostAuthor = {
-      id: apiPost.author.id,
-      nickname: apiPost.author.nickname,
-      avatar: apiPost.author.avatar,
-      level: apiPost.author.level,
-      levelTitle: apiPost.author.levelTitle,
-    };
-
-    const post: Post = {
-      id: apiPost.id,
-      author: author,
-      content: apiPost.content,
-      images: apiPost.images,
-      tags: apiPost.tags,
-      likeCount: apiPost.likeCount,
-      commentCount: apiPost.commentCount,
-      shareCount: apiPost.shareCount,
-      collectCount: apiPost.collectCount,
-      isLiked: apiPost.isLiked,
-      isCollected: apiPost.isCollected,
-      createdAt: apiPost.createdAt,
-      type: apiPost.type as 'image' | 'video',
-      hotComments: [],
-    };
-    if (apiPost.video) post.video = apiPost.video;
-    if (apiPost.city !== null) {
-      post.location = {
-        cityId: apiPost.city.id,
-        cityName: apiPost.city.name,
-        address: apiPost.address || undefined,
-      };
-    }
-    return post;
-  }
-
   private updateImageEffect(): void {
     if (this.scrollY <= 0) {
       this.imageScale = 1.3 + Math.abs(this.scrollY) / 800;
@@ -171,7 +137,7 @@ struct CityDetailPage {
     const originalPost = this.cityPosts[index];
     const wasLiked = originalPost.isLiked;
 
-    const updatedPost = this.clonePost(originalPost);
+    const updatedPost = clonePost(originalPost);
     updatedPost.isLiked = !wasLiked;
     updatedPost.likeCount = Math.max(0, originalPost.likeCount + (updatedPost.isLiked ? 1 : -1));
 
@@ -186,7 +152,7 @@ struct CityDetailPage {
       if (wasLiked) result = await ApiService.unlikePost(post.id);
       else result = await ApiService.likePost(post.id);
 
-      const syncPost = this.clonePost(updatedPost);
+      const syncPost = clonePost(updatedPost);
       syncPost.likeCount = result.likeCount;
       const syncList: Post[] = [];
       for (let i = 0; i < this.cityPosts.length; i++) syncList.push(i === index ? syncPost : this.cityPosts[i]);
@@ -198,17 +164,23 @@ struct CityDetailPage {
     }
   }
 
-  private clonePost(source: Post): Post {
-    const authorCopy: PostAuthor = { id: source.author.id, nickname: source.author.nickname, avatar: source.author.avatar, level: source.author.level, levelTitle: source.author.levelTitle };
-    const cloned: Post = { id: source.id, author: authorCopy, content: source.content, images: source.images.slice(), tags: source.tags.slice(), likeCount: source.likeCount, commentCount: source.commentCount, shareCount: source.shareCount, collectCount: source.collectCount, isLiked: source.isLiked, isCollected: source.isCollected, createdAt: source.createdAt, type: source.type };
-    if (source.video) cloned.video = source.video;
-    if (source.location) cloned.location = { cityId: source.location.cityId, cityName: source.location.cityName, address: source.location.address };
-    return cloned;
+  private navigateToPostDetail(post: Post): void {
+    router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: post.id } }).catch((error: Error) => {
+      console.error(`[CityDetail] 跳转动态详情失败: ${error.message}`);
+    });
   }
 
-  private navigateToPostDetail(post: Post): void { router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: post.id } }).catch(()=>{}); }
-  private openImagePreview(post: Post, imageIndex: number): void { router.pushUrl({ url: 'pages/community/ImagePreviewPage', params: { postId: post.id, images: post.images, imageIndex: imageIndex } }).catch(()=>{}); }
-  private navigateToUser(userId: string): void { router.pushUrl({ url: 'pages/community/UserProfilePage', params: { userId: userId } }).catch(()=>{}); }
+  private openImagePreview(post: Post, imageIndex: number): void {
+    router.pushUrl({ url: 'pages/community/ImagePreviewPage', params: { postId: post.id, images: post.images, imageIndex: imageIndex } }).catch((error: Error) => {
+      console.error(`[CityDetail] 打开图片预览失败: ${error.message}`);
+    });
+  }
+
+  private navigateToUser(userId: string): void {
+    router.pushUrl({ url: 'pages/community/UserProfilePage', params: { userId: userId } }).catch((error: Error) => {
+      console.error(`[CityDetail] 跳转用户主页失败: ${error.message}`);
+    });
+  }
 
   private getImageColor(index: number): string {
     const colors: string[] = ['#E0F2FE', '#CFFAFE', '#BAE6FD', '#A5F3FC'];
@@ -390,7 +362,18 @@ struct CityDetailPage {
   }
 
   @Builder CityImageItem(post: Post, index: number, w: number, h: number) {
-    Stack() { Image(post.images[index]).width('100%').height('100%').objectFit(ImageFit.Cover) }.width(w).height(h).backgroundColor('#E8E8E8').borderRadius(6).onClick(() => { this.openImagePreview(post, index); })
+    Stack() {
+      Image(ImageUtils.formatOssUrl(post.images[index], 'thumb'))
+        .width('100%')
+        .height('100%')
+        .objectFit(ImageFit.Cover)
+        .borderRadius(4)
+    }
+    .width(w)
+    .height(h)
+    .backgroundColor('#E8E8E8')
+    .borderRadius(6)
+    .onClick(() => { this.openImagePreview(post, index); })
   }
 
   @Builder TravelersContent() { Column(){ Text('驴友功能开发中').fontColor('#94A3B8') }.width('100%').height(200).justifyContent(FlexAlign.Center) }

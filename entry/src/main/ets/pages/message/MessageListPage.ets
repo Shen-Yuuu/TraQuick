@@ -4,6 +4,7 @@
 
 import { router, promptAction } from '@kit.ArkUI';
 import { ApiService, ApiMessage, MessageListData } from '../../services/ApiService';
+import { formatTime } from '../../utils/Formatter';
 
 class MessageListItem {
   id: string = '';
@@ -105,7 +106,7 @@ struct MessageListPage {
     const item = new MessageListItem();
     item.id = apiMsg.id;
     item.type = apiMsg.type;
-    item.time = this.formatTime(apiMsg.createdAt);
+    item.time = formatTime(apiMsg.createdAt);
     item.isRead = apiMsg.isRead;
 
     // 提取互动者信息
@@ -189,35 +190,20 @@ struct MessageListPage {
     if (this.messageType === 'follow') {
       // 关注 -> 跳个人主页
       if (item.userId) {
-        router.pushUrl({ url: 'pages/community/UserProfilePage', params: { userId: item.userId } }).catch(()=>{});
+        router.pushUrl({ url: 'pages/community/UserProfilePage', params: { userId: item.userId } }).catch((error: Error) => {
+          console.error(`[MessageList] 跳转用户主页失败: ${error.message}`);
+        });
       }
     } else {
       // 点赞/评论 -> 跳帖子详情
       if (item.postId) {
-        router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: item.postId } }).catch(()=>{});
+        router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: item.postId } }).catch((error: Error) => {
+          console.error(`[MessageList] 跳转动态详情失败: ${error.message}`);
+        });
       } else {
         promptAction.showToast({ message: '原内容已不存在' });
       }
     }
-  }
-
-  /**
-   * 工具：格式化时间显示
-   */
-  private formatTime(isoString: string): string {
-    if (!isoString) return '';
-    const date = new Date(isoString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return '刚刚';
-    if (minutes < 60) return `${minutes}分钟前`;
-    if (hours < 24) return `${hours}小时前`;
-    if (days === 1) return '昨天';
-    return `${date.getMonth() + 1}-${date.getDate()}`;
   }
 
   private goBack(): void {

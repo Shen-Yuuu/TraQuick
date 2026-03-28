@@ -262,15 +262,26 @@ export struct CityCardDialog {
   }
 
   private formatDistance(): string {
-    const map: Record<string, number> = {
-      '巴黎': 8942, '东京': 1876, '纽约': 11234, '伦敦': 8123,
-      '北京': 1240, '上海': 1120, '成都': 1580, '西安': 1380, '黄山': 680,
-    };
-    const dist = map[this.city.name] || Math.floor(Math.random() * 5000 + 500);
+    // 优先使用当前定位，缺失时使用北京作为兜底参考点。
+    const userLat = AppStorage.get<number>('currentLatitude') || 39.9042;
+    const userLon = AppStorage.get<number>('currentLongitude') || 116.4074;
+    const dist = this.calculateDistanceKm(userLat, userLon, this.city.latitude, this.city.longitude);
     if (dist >= 10000) {
       return `${(dist / 10000).toFixed(1)}万km`;
     }
     return `${dist.toLocaleString()}km`;
+  }
+
+  private calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const toRad = (deg: number): number => deg * Math.PI / 180;
+    const earthRadiusKm = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
+      * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(earthRadiusKm * c);
   }
 
   // formatCount → 已抽取到 utils/Formatter.ets

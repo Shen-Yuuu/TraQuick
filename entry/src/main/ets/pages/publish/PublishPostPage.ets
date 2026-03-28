@@ -6,7 +6,9 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { ApiService, CreatePostParams } from '../../services/ApiService';
 import { common } from '@kit.AbilityKit';
-import { LocationService, LocationInfo } from '../../utils/LocationService'; // 👈 引入新写的工具类
+import { LocationService, LocationInfo } from '../../utils/LocationService';
+import { ImageUtils } from '../../utils/ImageUtils';
+import { fileIo as fs } from '@kit.CoreFileKit';
 
 // ==================== 话题标签输入弹窗 ====================
 @CustomDialog
@@ -223,8 +225,12 @@ struct PublishPostPage {
       const uploadedUrls: string[] = [];
       if (this.selectedImages.length > 0) {
         for (const localUri of this.selectedImages) {
-          const ossUrl = await ApiService.uploadImage(this.context, localUri);
+          const compressedPath = await ImageUtils.compressImage(this.context, localUri);
+          const ossUrl = await ApiService.uploadImage(compressedPath);
           uploadedUrls.push(ossUrl);
+          try {
+            fs.unlinkSync(compressedPath);
+          } catch(e) {}
         }
       }
 

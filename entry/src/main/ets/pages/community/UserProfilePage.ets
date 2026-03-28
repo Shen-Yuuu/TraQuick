@@ -3,9 +3,11 @@
  */
 
 import { router, promptAction } from '@kit.ArkUI';
-import { Post, PostAuthor, PostLocation } from '../../models/Post';
+import { Post } from '../../models/Post';
 import { User } from '../../models/User';
 import { ApiService, ApiPost, UserProfileData, FollowResult, PaginatedPosts } from '../../services/ApiService';
+import { ImageUtils } from '../../utils/ImageUtils';
+import { mapApiPostToPost } from '../../utils/PostMapper';
 
 @Entry
 @Component
@@ -82,7 +84,7 @@ struct UserProfilePage {
       const postsData: PaginatedPosts = await ApiService.getPosts(1, 20, 'latest', this.userId);
       const newPosts: Post[] = [];
       for (const apiPost of postsData.items) {
-        newPosts.push(this.convertApiPost(apiPost));
+        newPosts.push(mapApiPostToPost(apiPost));
       }
       this.userPosts = newPosts;
 
@@ -91,7 +93,7 @@ struct UserProfilePage {
         const likedData: PaginatedPosts = await ApiService.getPosts(1, 20, 'latest', '', '', '', this.userId);
         const tempLiked: Post[] = [];
         for (const p of likedData.items) {
-          tempLiked.push(this.convertApiPost(p));
+          tempLiked.push(mapApiPostToPost(p));
         }
         this.likedPosts = tempLiked;
       } catch (e) {
@@ -105,45 +107,6 @@ struct UserProfilePage {
     } finally {
       this.isLoading = false;
     }
-  }
-
-  private convertApiPost(apiPost: ApiPost): Post {
-    const author: PostAuthor = {
-      id: apiPost.author.id,
-      nickname: apiPost.author.nickname,
-      avatar: apiPost.author.avatar,
-      level: apiPost.author.level,
-      levelTitle: apiPost.author.levelTitle,
-    };
-
-    const post: Post = {
-      id: apiPost.id,
-      author: author,
-      content: apiPost.content,
-      images: apiPost.images,
-      tags: apiPost.tags,
-      likeCount: apiPost.likeCount,
-      commentCount: apiPost.commentCount,
-      shareCount: apiPost.shareCount,
-      collectCount: apiPost.collectCount,
-      isLiked: apiPost.isLiked,
-      isCollected: apiPost.isCollected,
-      createdAt: apiPost.createdAt,
-      type: apiPost.type as 'image' | 'video',
-      hotComments: [],
-    };
-
-    if (apiPost.video) post.video = apiPost.video;
-    if (apiPost.city) {
-      post.location = {
-        cityId: apiPost.city.id,
-        cityName: apiPost.city.name,
-        address: apiPost.address || undefined,
-        latitude: apiPost.latitude || undefined,
-        longitude: apiPost.longitude || undefined,
-      };
-    }
-    return post;
   }
 
     private async toggleFollow(): Promise<void> {
@@ -183,9 +146,17 @@ struct UserProfilePage {
     // TODO: 跳转到私信聊天页
     // router.pushUrl({ url: 'pages/message/ChatPage', params: { targetId: this.userId } });
   }
-  private navigateToPostDetail(post: Post): void { router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: post.id } }).catch(()=>{}); }
+  private navigateToPostDetail(post: Post): void {
+    router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: post.id } }).catch((error: Error) => {
+      console.error(`[UserProfile] 跳转动态详情失败: ${error.message}`);
+    });
+  }
   private navigateToEditProfile(): void { router.pushUrl({ url: 'pages/profile/EditProfilePage' }); }
-  private navigateToSettings(): void { router.pushUrl({ url: 'pages/settings/SettingsPage' }).catch(()=>{}); }
+  private navigateToSettings(): void {
+    router.pushUrl({ url: 'pages/settings/SettingsPage' }).catch((error: Error) => {
+      console.error(`[UserProfile] 跳转设置页失败: ${error.message}`);
+    });
+  }
 
   private formatCount(count: number): string {
     if (count >= 10000) return `${(count / 10000).toFixed(1)}w`;
@@ -303,7 +274,7 @@ struct UserProfilePage {
 
         // 真实头像
         if (this.user?.avatar) {
-          Image(this.user.avatar).width(76).height(76).borderRadius(38).objectFit(ImageFit.Cover).border({ width: 3, color: '#FFFFFF' })
+          Image(ImageUtils.formatOssUrl(this.user.avatar, 'avatar')).width(76).height(76).borderRadius(38).objectFit(ImageFit.Cover).border({ width: 3, color: '#FFFFFF' })
         } else {
           Column() { Text((this.user?.nickname || 'U').charAt(0)).fontSize(32).fontWeight(FontWeight.Bold).fontColor('#FFFFFF') }
           .width(76).height(76).borderRadius(38).backgroundColor(this.isSelf ? '#0EA5E9' : '#64748B').border({ width: 3, color: '#FFFFFF' }).justifyContent(FlexAlign.Center)

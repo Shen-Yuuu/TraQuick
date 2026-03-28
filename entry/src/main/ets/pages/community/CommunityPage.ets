@@ -4,9 +4,12 @@
 
 import { promptAction, router } from '@kit.ArkUI';
 import { SharePanel } from '../../components/common/SharePanel';
-import { Post, PostAuthor, PostLocation, PostUpdateInfo } from '../../models/Post';
+import { Post, PostUpdateInfo } from '../../models/Post';
 import { ApiService, ApiPost, PaginatedPosts, LikeResult, CollectResult } from '../../services/ApiService';
 import { formatTime, formatCount } from '../../utils/Formatter';
+import { mapApiPostToPost, clonePost } from '../../utils/PostMapper';
+import { Colors } from '../../utils/Constants';
+import { ImageUtils } from '../../utils/ImageUtils';
 
 export class ShareTargetItem {
   id: string = '';
@@ -56,7 +59,7 @@ export struct CommunityPage {
       const index = this.postList.findIndex(p => p.id === update.postId);
       if (index !== -1) {
         const original = this.postList[index];
-        const updated = this.clonePost(original);
+        const updated = clonePost(original);
 
         // 覆盖最新数据
         updated.isLiked = update.isLiked;
@@ -93,7 +96,7 @@ export struct CommunityPage {
     }
 
     const original = this.postList[index];
-    const updated = this.clonePost(original);
+    const updated = clonePost(original);
 
     // 用详情页返回的最新数据覆盖
     updated.isLiked = update.isLiked;
@@ -147,7 +150,7 @@ export struct CommunityPage {
 
       const newPosts: Post[] = [];
       for (const apiPost of result.items) {
-        newPosts.push(this.convertApiPost(apiPost));
+        newPosts.push(mapApiPostToPost(apiPost));
       }
 
       if (isRefresh) {
@@ -192,59 +195,6 @@ export struct CommunityPage {
   }
 
   /**
-   * 转换后端数据为前端 Post 结构
-   */
-  private convertApiPost(apiPost: ApiPost): Post {
-    const author: PostAuthor = {
-      id: apiPost.author.id,
-      nickname: apiPost.author.nickname,
-      avatar: apiPost.author.avatar,
-      level: apiPost.author.level,
-      levelTitle: apiPost.author.levelTitle,
-    };
-
-    const post: Post = {
-      id: apiPost.id,
-      author: author,
-      content: apiPost.content,
-      images: apiPost.images,
-      tags: apiPost.tags,
-      likeCount: apiPost.likeCount,
-      commentCount: apiPost.commentCount,
-      shareCount: apiPost.shareCount,
-      collectCount: apiPost.collectCount,
-      isLiked: apiPost.isLiked,
-      isCollected: apiPost.isCollected,
-      createdAt: apiPost.createdAt,
-      type: apiPost.type as 'image' | 'video',
-      hotComments: [],
-    };
-
-    if (apiPost.video) {
-      post.video = apiPost.video;
-    }
-
-    if (apiPost.city !== null) {
-      const location: PostLocation = {
-        cityId: apiPost.city.id,
-        cityName: apiPost.city.name,
-      };
-      if (apiPost.address) {
-        location.address = apiPost.address;
-      }
-      if (apiPost.latitude) {
-        location.latitude = apiPost.latitude;
-      }
-      if (apiPost.longitude) {
-        location.longitude = apiPost.longitude;
-      }
-      post.location = location;
-    }
-
-    return post;
-  }
-
-  /**
    * 下拉刷新
    */
   private onRefresh(): void {
@@ -273,7 +223,7 @@ export struct CommunityPage {
     const wasLiked = originalPost.isLiked;
 
     // 乐观更新
-    const updatedPost = this.clonePost(originalPost);
+    const updatedPost = clonePost(originalPost);
     updatedPost.isLiked = !wasLiked;
     updatedPost.likeCount = Math.max(0, originalPost.likeCount + (updatedPost.isLiked ? 1 : -1));
 
@@ -296,7 +246,7 @@ export struct CommunityPage {
       }
 
       // 用后端返回的真实计数更新
-      const syncPost = this.clonePost(updatedPost);
+      const syncPost = clonePost(updatedPost);
       syncPost.likeCount = result.likeCount;
 
       const syncList: Post[] = [];
@@ -333,7 +283,7 @@ export struct CommunityPage {
     const originalPost = this.postList[index];
     const wasCollected = originalPost.isCollected;
 
-    const updatedPost = this.clonePost(originalPost);
+    const updatedPost = clonePost(originalPost);
     updatedPost.isCollected = !wasCollected;
     updatedPost.collectCount = Math.max(0, originalPost.collectCount + (updatedPost.isCollected ? 1 : -1));
 
@@ -355,7 +305,7 @@ export struct CommunityPage {
         result = await ApiService.collectPost(post.id);
       }
 
-      const syncPost = this.clonePost(updatedPost);
+      const syncPost = clonePost(updatedPost);
       syncPost.collectCount = result.collectCount;
 
       const syncList: Post[] = [];
@@ -388,7 +338,9 @@ export struct CommunityPage {
     router.pushUrl({
       url: 'pages/community/PostDetailPage',
       params: { postId: post.id }
-    }).catch(() => {});
+    }).catch((error: Error) => {
+      console.error(`[Community] 跳转动态详情失败: ${error.message}`);
+    });
   }
 
   private async onShare(post: Post): Promise<void> {
@@ -420,57 +372,18 @@ export struct CommunityPage {
     router.pushUrl({
       url: 'pages/community/ImagePreviewPage',
       params: { postId: post.id, images: post.images, imageIndex: imageIndex,isLiked: post.isLiked }
-    }).catch(() => {});
+    }).catch((error: Error) => {
+      console.error(`[Community] 打开图片预览失败: ${error.message}`);
+    });
   }
 
   private navigateToUser(userId: string): void {
     router.pushUrl({
       url: 'pages/community/UserProfilePage',
       params: { userId: userId }
-    }).catch(() => {});
-  }
-
-  private clonePost(source: Post): Post {
-    const authorCopy: PostAuthor = {
-      id: source.author.id,
-      nickname: source.author.nickname,
-      avatar: source.author.avatar,
-      level: source.author.level,
-      levelTitle: source.author.levelTitle,
-    };
-
-    const cloned: Post = {
-      id: source.id,
-      author: authorCopy,
-      content: source.content,
-      images: source.images.slice(),
-      tags: source.tags.slice(),
-      likeCount: source.likeCount,
-      commentCount: source.commentCount,
-      shareCount: source.shareCount,
-      collectCount: source.collectCount,
-      isLiked: source.isLiked,
-      isCollected: source.isCollected,
-      createdAt: source.createdAt,
-      type: source.type,
-    };
-
-    if (source.video) {
-      cloned.video = source.video;
-    }
-
-    if (source.location) {
-      const locCopy: PostLocation = {
-        cityId: source.location.cityId,
-        cityName: source.location.cityName,
-      };
-      if (source.location.address) {
-        locCopy.address = source.location.address;
-      }
-      cloned.location = locCopy;
-    }
-
-    return cloned;
+    }).catch((error: Error) => {
+      console.error(`[Community] 跳转用户主页失败: ${error.message}`);
+    });
   }
 
   build() {
@@ -510,7 +423,7 @@ export struct CommunityPage {
             // 可选：前端乐观更新分享数
             const idx = this.postList.findIndex(p => p.id === this.sharePost!.id);
             if (idx !== -1) {
-              const updated = this.clonePost(this.postList[idx]);
+              const updated = clonePost(this.postList[idx]);
               updated.shareCount += 1;
               const newList: Post[] = [];
               for (let i=0; i<this.postList.length; i++) newList.push(i === idx ? updated : this.postList[i]);
@@ -524,7 +437,7 @@ export struct CommunityPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F0F4F8')
+    .backgroundColor(Colors.bgSecondary)
   }
 
   @Builder
@@ -614,11 +527,11 @@ export struct CommunityPage {
                   .fontSize(14)
                 Text(this.errorMessage)
                   .fontSize(13)
-                  .fontColor('#EF4444')
+                    .fontColor(Colors.error)
                   .margin({ left: 6 })
                 Text(' 点击重试')
                   .fontSize(13)
-                  .fontColor('#38BDF8')
+                    .fontColor(Colors.primary)
               }
               .width('100%')
               .padding({ left: 16, right: 16, top: 10, bottom: 10 })
@@ -639,7 +552,7 @@ export struct CommunityPage {
                   .fontSize(48)
                 Text('暂无动态')
                   .fontSize(14)
-                  .fontColor('#94A3B8')
+                  .fontColor(Colors.textQuaternary)
                   .margin({ top: 12 })
                 Text('下拉刷新试试')
                   .fontSize(12)
@@ -665,7 +578,7 @@ export struct CommunityPage {
                 LoadingProgress()
                   .width(24)
                   .height(24)
-                  .color('#38BDF8')
+                  .color(Colors.primary)
                 Text('加载中...')
                   .fontSize(13)
                   .fontColor('#94A3B8')
@@ -968,13 +881,7 @@ export struct CommunityPage {
   @Builder
   ImageItem(post: Post, images: string[], index: number, w: number, h: number) {
     Stack() {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor('#E8E8E8')
-        .borderRadius(4)
-
-      Image(images[index])
+      Image(ImageUtils.formatOssUrl(images[index], 'thumb'))
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Cover)

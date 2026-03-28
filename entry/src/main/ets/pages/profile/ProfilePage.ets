@@ -4,10 +4,13 @@
 
 import { router, promptAction } from '@kit.ArkUI';
 import { ApiService, ApiPost, UserProfileData, PaginatedPosts, UpdateProfileParams } from '../../services/ApiService';
-import { Post, PostAuthor, PostLocation } from '../../models/Post';
+import { Post } from '../../models/Post';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { common } from '@kit.AbilityKit';
 import { emitter } from '@kit.BasicServicesKit';
+import { mapApiPostToPost } from '../../utils/PostMapper';
+import { ImageUtils } from '../../utils/ImageUtils';
+import { fileIo as fs } from '@kit.CoreFileKit';
 
 interface BadgeItem {
   icon: string;
@@ -60,6 +63,7 @@ export struct ProfilePage {
   @State arrowRotation: number = 0;
   @State isDragging: boolean = false;
   @State coverBgIndex: number = 0;
+  @StorageLink('communityRefreshTrigger') @Watch('onCommunityRefreshTrigger') communityRefreshTrigger: number = 0;
 
   private readonly MAX_EXPAND_HEIGHT: number = 320;
   private readonly MIN_HEIGHT: number = 0;
@@ -116,6 +120,12 @@ export struct ProfilePage {
     }
   }
 
+  private onCommunityRefreshTrigger(): void {
+    if (this.currentUserId && !this.isLoading) {
+      this.loadMyProfile();
+    }
+  }
+
   private async loadMyProfile(): Promise<void> {
     this.isLoading = true;
     try {
@@ -139,7 +149,7 @@ export struct ProfilePage {
       const myPostsData: PaginatedPosts = await ApiService.getPosts(1, 50, 'latest', this.currentUserId);
       const tempMyPosts: Post[] = [];
       for (const apiPost of myPostsData.items) {
-        tempMyPosts.push(this.convertApiPost(apiPost));
+        tempMyPosts.push(mapApiPostToPost(apiPost));
       }
       this.myPosts = tempMyPosts;
 
@@ -147,7 +157,7 @@ export struct ProfilePage {
       const likedPostsData: PaginatedPosts = await ApiService.getPosts(1, 50, 'latest', '', '', '', this.currentUserId);
       const tempLikedPosts: Post[] = [];
       for (const apiPost of likedPostsData.items) {
-        tempLikedPosts.push(this.convertApiPost(apiPost));
+        tempLikedPosts.push(mapApiPostToPost(apiPost));
       }
       this.likedPosts = tempLikedPosts;
 
@@ -155,7 +165,7 @@ export struct ProfilePage {
       const collectedPostsData: PaginatedPosts = await ApiService.getPosts(1, 50, 'latest', '', '', '', '', this.currentUserId);
       const tempCollectedPosts: Post[] = [];
       for (const apiPost of collectedPostsData.items) {
-        tempCollectedPosts.push(this.convertApiPost(apiPost));
+        tempCollectedPosts.push(mapApiPostToPost(apiPost));
       }
       this.collectedPosts = tempCollectedPosts;
 
@@ -166,45 +176,29 @@ export struct ProfilePage {
     }
   }
 
-  private convertApiPost(apiPost: ApiPost): Post {
-    const author: PostAuthor = {
-      id: apiPost.author.id,
-      nickname: apiPost.author.nickname,
-      avatar: apiPost.author.avatar,
-      level: apiPost.author.level,
-      levelTitle: apiPost.author.levelTitle,
-    };
-
-    const post: Post = {
-      id: apiPost.id,
-      author: author,
-      content: apiPost.content,
-      images: apiPost.images,
-      tags: apiPost.tags,
-      likeCount: apiPost.likeCount,
-      commentCount: apiPost.commentCount,
-      shareCount: apiPost.shareCount,
-      collectCount: apiPost.collectCount,
-      isLiked: apiPost.isLiked,
-      isCollected: apiPost.isCollected,
-      createdAt: apiPost.createdAt,
-      type: apiPost.type as 'image' | 'video',
-      hotComments: [],
-    };
-
-    if (apiPost.video) post.video = apiPost.video;
-    if (apiPost.city !== null) {
-      post.location = { cityId: apiPost.city.id, cityName: apiPost.city.name };
-      if (apiPost.address) post.location.address = apiPost.address;
-    }
-
-    return post;
+  private navigateToSettings(): void {
+    router.pushUrl({ url: 'pages/profile/SettingsPage' }).catch((error: Error) => {
+      console.error(`[Profile] 跳转设置页失败: ${error.message}`);
+    });
   }
 
-  private navigateToSettings(): void { router.pushUrl({ url: 'pages/profile/SettingsPage' }).catch(() => {}); }
-  private navigateToEditProfile(): void { router.pushUrl({ url: 'pages/profile/EditProfilePage' }).catch(() => {}); }
-  private navigateToBadgeWall(): void { router.pushUrl({ url: 'pages/profile/BadgeWallPage' }).catch(() => {}); }
-  private navigateToPostDetail(post: Post): void { router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: post.id } }).catch(() => {}); }
+  private navigateToEditProfile(): void {
+    router.pushUrl({ url: 'pages/profile/EditProfilePage' }).catch((error: Error) => {
+      console.error(`[Profile] 跳转编辑资料失败: ${error.message}`);
+    });
+  }
+
+  private navigateToBadgeWall(): void {
+    router.pushUrl({ url: 'pages/profile/BadgeWallPage' }).catch((error: Error) => {
+      console.error(`[Profile] 跳转勋章墙失败: ${error.message}`);
+    });
+  }
+
+  private navigateToPostDetail(post: Post): void {
+    router.pushUrl({ url: 'pages/community/PostDetailPage', params: { postId: post.id } }).catch((error: Error) => {
+      console.error(`[Profile] 跳转动态详情失败: ${error.message}`);
+    });
+  }
 
   // 上传并更换主页背景图
   private async changeCoverImage(): Promise<void> {
@@ -216,18 +210,36 @@ export struct ProfilePage {
 
       const result = await picker.select(options);
       if (result && result.photoUris && result.photoUris.length > 0) {
-        promptAction.showToast({ message: '正在上传背景图...' });
-        const ossUrl = await ApiService.uploadImage(this.context, result.photoUris[0]);
 
-        // 乐观更新 UI
+        promptAction.showToast({ message: '正在处理背景图...' });
+
+        // 1. 压缩背景图
+        const localUri = result.photoUris[0];
+        const compressedPath = await ImageUtils.compressImage(this.context, localUri);
+
+        promptAction.showToast({ message: '正在上传背景图...' });
+
+        // 2. 上传压缩后的图片
+        const ossUrl = await ApiService.uploadImage(compressedPath);
+
+        // 3. 乐观更新 UI
         this.coverImage = ossUrl;
 
-        // 保存到后端
+        // 4. 保存到后端
         const params = new UpdateProfileParams();
         params.coverImage = ossUrl;
         await ApiService.updateProfile(params);
 
+        // 5. 触发全局刷新，确保所有依赖 profile 的地方都更新
+        const trigger = AppStorage.get<number>('profileRefreshTrigger') || 0;
+        AppStorage.setOrCreate('profileRefreshTrigger', trigger + 1);
+
         promptAction.showToast({ message: '背景更换成功' });
+
+        // 可选：清理沙箱里的压缩文件
+        try {
+          fs.unlinkSync(compressedPath);
+        } catch (e) {}
       }
     } catch (error) {
       console.error('[Profile] 更换背景失败:', (error as Error).message);
@@ -399,7 +411,9 @@ export struct ProfilePage {
       .alignItems(HorizontalAlign.Center)
       .margin({ right: 12 })
       .onClick(() => {
-        router.pushUrl({ url: 'pages/publish/PublishPostPage' }).catch(() => {});
+        router.pushUrl({ url: 'pages/publish/PublishPostPage' }).catch((error: Error) => {
+          console.error(`[Profile] 跳转发布页失败: ${error.message}`);
+        });
       })
 
       // 设置按钮
@@ -428,7 +442,7 @@ export struct ProfilePage {
 
         Column() {
           if (this.avatar) {
-            Image(this.avatar).width(76).height(76).borderRadius(38).objectFit(ImageFit.Cover)
+            Image(ImageUtils.formatOssUrl(this.avatar, 'avatar')).width(76).height(76).borderRadius(38).objectFit(ImageFit.Cover)
           } else {
             Text((this.nickname || '我').charAt(0)).fontSize(32).fontWeight(FontWeight.Bold).fontColor('#FFFFFF')
           }

@@ -3,7 +3,7 @@
  */
 
 import { router, promptAction } from '@kit.ArkUI';
-import { ApiService } from '../../services/ApiService';
+import { ApiService, CreateBottleParams } from '../../services/ApiService';
 
 @Entry
 @Component
@@ -239,7 +239,6 @@ struct DriftBottlePage {
 
   /**
    * 发布漂流瓶
-   * TODO: 对接后端 API（ApiService.createDriftBottle）
    */
   async handlePublish(): Promise<void> {
     if (!this.content.trim()) {
@@ -251,13 +250,10 @@ struct DriftBottlePage {
     this.errorMessage = '';
 
     try {
-      // TODO: 替换为真实 API
-      // await ApiService.createDriftBottle({
-      //   content: this.content,
-      //   mood: this.selectedMood,
-      //   isTask: this.isTaskBottle,
-      // });
-      await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+      const params = new CreateBottleParams();
+      params.content = `${this.selectedMood} ${this.content.trim()}`;
+      params.type = this.isTaskBottle ? 'question' : 'wish';
+      await ApiService.createBottle(params);
 
       promptAction.showToast({ message: '漂流瓶已投入大海 🌊' });
       router.back();

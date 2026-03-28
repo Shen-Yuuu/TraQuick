@@ -48,6 +48,7 @@ struct DriftBottlePage {
 
   @State bottleFloat: number = 0;
   @State isLoading: boolean = false;
+  private bottleAnimateTimer: number = -1;
 
   private typeOptions: BottleTypeOption[] = [
     new BottleTypeOption('wish', '许愿', '🌟', '许下心愿', '#FEF3C7'),
@@ -66,11 +67,18 @@ struct DriftBottlePage {
   }
 
   private startBottleAnimation(): void {
-    setInterval(() => {
+    this.bottleAnimateTimer = setInterval(() => {
       animateTo({ duration: 2000, curve: Curve.EaseInOut }, () => {
         this.bottleFloat = this.bottleFloat === 0 ? -12 : 0;
       });
     }, 2000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.bottleAnimateTimer !== -1) {
+      clearInterval(this.bottleAnimateTimer);
+      this.bottleAnimateTimer = -1;
+    }
   }
 
   /**
@@ -150,6 +158,7 @@ struct DriftBottlePage {
       // 清空本地缓存强制重新加载
       this.mySentBottles = [];
       this.currentTab = 2; // 跳转到"我的"
+      await this.loadMyBottles();
 
     } catch (error) {
       promptAction.showToast({ message: '扔瓶子失败: ' + (error as Error).message });
@@ -162,6 +171,25 @@ struct DriftBottlePage {
     if (!isoString) return '';
     const date = new Date(isoString);
     return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+  }
+
+  private openBottleResult(): void {
+    if (this.pickedBottle === null) {
+      return;
+    }
+    router.pushUrl({
+      url: 'pages/explore/BottleResultPage',
+      params: {
+        senderName: this.pickedBottle.senderNickname,
+        senderCity: this.pickedBottle.senderCity,
+        senderLevel: 1,
+        sendTime: this.formatTime(this.pickedBottle.createdAt),
+        distance: '--',
+        wishContent: this.pickedBottle.content,
+      }
+    }).catch((error: Error) => {
+      console.error(`[DriftBottle] 打开漂流瓶结果失败: ${error.message}`);
+    });
   }
 
   private getTypeInfo(type: string): BottleTypeOption {
@@ -271,6 +299,7 @@ struct DriftBottlePage {
               }.alignItems(HorizontalAlign.Start).margin({ left: 10 })
             }
           }.width('100%').padding(20).backgroundColor('#FFFFFF').borderRadius(20).shadow({ radius: 20, color: 'rgba(0,0,0,0.08)', offsetY: 4 }).margin({ top: 20 })
+          .onClick(() => { this.openBottleResult(); })
 
           Row({ space: 12 }) {
             Row() { Text('💬 回复TA').fontSize(14).fontWeight(FontWeight.Medium).fontColor('#0369A1') }

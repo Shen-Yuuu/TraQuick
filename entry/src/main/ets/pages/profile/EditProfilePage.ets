@@ -3,6 +3,7 @@ import { ApiService, ApiUser, UpdateProfileParams } from '../../services/ApiServ
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { common } from '@kit.AbilityKit';
 import { emitter } from '@kit.BasicServicesKit';
+import { ImageUtils } from '../../utils/ImageUtils';
 
 // ==================== 圆形裁剪预览弹窗 ====================
 @CustomDialog
@@ -158,7 +159,11 @@ struct EditProfilePage {
     this.isLoading = true;
     try {
       promptAction.showToast({ message: '正在上传头像...' });
-      const ossUrl = await ApiService.uploadImage(this.context, uri);
+      const compressedPath = await ImageUtils.compressImage(this.context, uri);
+
+      promptAction.showToast({ message: '正在上传头像...' });
+      const ossUrl = await ApiService.uploadImage(compressedPath);
+
       this.avatar = ossUrl;
 
       // 直接保存到后端

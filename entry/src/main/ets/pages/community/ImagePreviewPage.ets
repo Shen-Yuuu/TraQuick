@@ -11,6 +11,7 @@ import { fileIo as fs } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { ImageUtils } from '../../utils/ImageUtils';
 
 class ImagePreviewParams {
   images?: string[];
@@ -226,7 +227,7 @@ struct ImagePreviewPage {
           Swiper() {
             ForEach(this.images, (img: string, index: number) => {
               Stack() {
-                Image(img)
+                Image(ImageUtils.formatOssUrl(img, 'origin'))
                   .width('100%')
                   .height('100%')
                   .objectFit(ImageFit.Contain)

@@ -5,7 +5,6 @@
 
 import { authService } from '../../services/AuthService';
 import { storage, StorageKeys } from '../../utils/Storage';
-import { hidebug } from '@kit.PerformanceAnalysisKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';

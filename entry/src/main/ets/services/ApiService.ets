@@ -496,18 +496,8 @@ class ApiServiceClass {
    * 上传图片到 OSS
    * 自动处理从相册 URI 拷贝到沙箱再上传的流程
    */
-  async uploadImage(context: Context, fileUri: string): Promise<string> {
+  async uploadImage(filePath: string): Promise<string> {
     try {
-      // 1. 将相册文件拷贝到沙箱 cache 目录
-      const cacheDir = context.cacheDir;
-      const fileName = `upload_${Date.now()}.jpg`;
-      const cacheFilePath = `${cacheDir}/${fileName}`;
-
-      const file = fs.openSync(fileUri, fs.OpenMode.READ_ONLY);
-      fs.copyFileSync(file.fd, cacheFilePath);
-      fs.closeSync(file);
-
-      // 2. 发起 HTTP Multipart 上传
       const httpRequest = http.createHttp();
       const url = `${BASE_URL}/upload/image`;
 
@@ -523,7 +513,7 @@ class ApiServiceClass {
           {
             name: 'file',
             contentType: 'image/jpeg',
-            filePath: cacheFilePath,
+            filePath: filePath,
           }
         ],
         connectTimeout: 20000,
@@ -532,7 +522,6 @@ class ApiServiceClass {
 
       const result = JSON.parse(response.result as string) as ApiResponse;
       if (result.code >= 200 && result.code < 300) {
-        // 返回 OSS URL
         return (result.data as Record<string, string>).url;
       } else {
         throw new Error(result.message || '上传失败');

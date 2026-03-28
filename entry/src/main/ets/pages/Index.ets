@@ -178,16 +178,24 @@ struct Index {
     // 根据类型跳转到对应的发布页面
     switch (type) {
       case 'post':
-        router.pushUrl({ url: 'pages/publish/PublishPostPage' }).catch(() => {});
+        router.pushUrl({ url: 'pages/publish/PublishPostPage' }).catch((error: Error) => {
+          console.error(`[Index] 跳转发布图文失败: ${error.message}`);
+        });
         break;
       case 'video':
-        router.pushUrl({ url: 'pages/publish/PublishPostPage' }).catch(() => {});
+        router.pushUrl({ url: 'pages/publish/PublishPostPage' }).catch((error: Error) => {
+          console.error(`[Index] 跳转发布视频失败: ${error.message}`);
+        });
         break;
       case 'capsule':
-        router.pushUrl({ url: 'pages/publish/TimeCapsulePage' }).catch(() => {});
+        router.pushUrl({ url: 'pages/publish/TimeCapsulePage' }).catch((error: Error) => {
+          console.error(`[Index] 跳转时空胶囊失败: ${error.message}`);
+        });
         break;
       case 'bottle':
-        router.pushUrl({ url: 'pages/publish/DriftBottlePage' }).catch(() => {});
+        router.pushUrl({ url: 'pages/publish/DriftBottlePage' }).catch((error: Error) => {
+          console.error(`[Index] 跳转漂流瓶失败: ${error.message}`);
+        });
         break;
     }
   }

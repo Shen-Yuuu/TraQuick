@@ -5,6 +5,7 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { ApiService, CreateCapsuleParams } from '../../services/ApiService';
 
 interface TimeOption {
   label: string;
@@ -363,7 +364,6 @@ struct TimeCapsulePage {
 
   /**
    * 发布时空胶囊
-   * TODO: 对接后端 API（ApiService.createTimeCapsule）
    */
   async handlePublish(): Promise<void> {
     if (!this.content.trim()) {
@@ -375,16 +375,17 @@ struct TimeCapsulePage {
     try {
       const selectedTime = this.timeOptions[this.selectedTimeIndex];
       const openMonths = selectedTime.value;
+      const monthsToOpen = openMonths > 0 ? openMonths : 12;
+      const targetDate = new Date();
+      targetDate.setMonth(targetDate.getMonth() + monthsToOpen);
 
-      // TODO: 替换为真实 API
-      // await ApiService.createTimeCapsule({
-      //   content: this.content,
-      //   images: this.selectedImages,
-      //   openAfterMonths: openMonths,
-      //   location: this.locationName,
-      //   coordinates: this.coordinates,
-      // });
-      await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+      const params = new CreateCapsuleParams();
+      params.content = this.content.trim();
+      params.images = this.selectedImages;
+      params.targetDate = targetDate.toISOString();
+      params.cityName = this.locationName;
+      params.address = this.coordinates;
+      await ApiService.createCapsule(params);
 
       promptAction.showToast({ message: `时空胶囊已埋下 ⏳ ${selectedTime.label}后开启` });
       router.back();

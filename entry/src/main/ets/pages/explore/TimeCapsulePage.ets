@@ -32,6 +32,7 @@ struct TimeCapsulePage {
 
   @State selectedYearIndex: number = 0;
   @State capsuleFloat: number = 0;
+  private capsuleAnimateTimer: number = -1;
 
   private yearOptions: string[] = ['1年后', '2年后', '5年后', '10年后'];
   private yearValues: number[] = [1, 2, 5, 10];
@@ -48,11 +49,18 @@ struct TimeCapsulePage {
   }
 
   private startFloatAnimation(): void {
-    setInterval(() => {
+    this.capsuleAnimateTimer = setInterval(() => {
       animateTo({ duration: 2500, curve: Curve.EaseInOut }, () => {
         this.capsuleFloat = this.capsuleFloat === 0 ? -8 : 0;
       });
     }, 2500);
+  }
+
+  aboutToDisappear(): void {
+    if (this.capsuleAnimateTimer !== -1) {
+      clearInterval(this.capsuleAnimateTimer);
+      this.capsuleAnimateTimer = -1;
+    }
   }
 
   private setTargetYear(index: number): void {

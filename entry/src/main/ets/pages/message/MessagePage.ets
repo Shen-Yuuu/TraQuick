@@ -5,6 +5,7 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { Colors, FontSizes, Spacing, Radius } from '../../utils/Constants';
 import { ApiService, ApiMessageGroup } from '../../services/ApiService';
+import { formatTime } from '../../utils/Formatter';
 
 // ====== 状态类定义 ======
 
@@ -33,6 +34,7 @@ class SystemNoticeItem {
   isNew: boolean = false;
   unreadCount: number = 0;
   messageId: string = '';
+  createdAt: string = '';
 
   constructor() {}
 }
@@ -99,7 +101,8 @@ export struct MessagePage {
           notice.unreadCount = group.unreadCount;
           notice.messageId = group.latestMessage.id;
           notice.isNew = !group.latestMessage.isRead;
-          notice.time = this.formatTime(group.latestMessage.createdAt);
+          notice.createdAt = group.latestMessage.createdAt;
+          notice.time = formatTime(group.latestMessage.createdAt);
           notice.desc = group.latestMessage.content;
 
           // 设置样式
@@ -123,9 +126,9 @@ export struct MessagePage {
 
       this.quickActions = newActions;
 
-      // 通知按时间倒序排列（假定返回未排序时）
-      // 实际应用中，如果需要准确排序，应保存原始 Date 对象，此处简化处理
-      this.systemNotices = newNotices.sort((a, b) => 0);
+      this.systemNotices = newNotices.sort((a, b) => {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
 
       // 如果后端没有返回任何系统通知，插入一条占位欢迎通知
       if (this.systemNotices.length === 0) {
@@ -182,6 +185,7 @@ export struct MessagePage {
       updatedNotice.desc = originalNotice.desc;
       updatedNotice.time = originalNotice.time;
       updatedNotice.messageId = originalNotice.messageId;
+      updatedNotice.createdAt = originalNotice.createdAt;
 
       // 更新状态
       updatedNotice.isNew = false;
@@ -201,25 +205,6 @@ export struct MessagePage {
     } catch (error) {
       console.error('[Message] 标记已读失败:', (error as Error).message);
     }
-  }
-
-  /**
-   * 工具：格式化时间显示
-   */
-  private formatTime(isoString: string): string {
-    if (!isoString) return '';
-    const date = new Date(isoString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return '刚刚';
-    if (minutes < 60) return `${minutes}分钟前`;
-    if (hours < 24) return `${hours}小时前`;
-    if (days === 1) return '昨天';
-    return `${date.getMonth() + 1}-${date.getDate()}`;
   }
 
   build() {

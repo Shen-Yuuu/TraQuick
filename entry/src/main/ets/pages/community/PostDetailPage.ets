@@ -5,9 +5,10 @@
 
 import { router, promptAction } from '@kit.ArkUI';
 import { ApiService, ApiPost, CommentListData, ApiComment, CreateCommentParams, CollectResult, LikeResult } from '../../services/ApiService';
-import { Post, PostComment, PostAuthor, PostLocation, CommentReply,PostUpdateInfo } from '../../models/Post';
+import { Post, PostComment, CommentReply,PostUpdateInfo } from '../../models/Post';
 import { emitter } from '@kit.BasicServicesKit';
 import { SharePanel, ShareTarget } from '../../components/common/SharePanel';
+import { mapApiPostToPost } from '../../utils/PostMapper';
 
 export class DetailShareTarget {
   id: string = '';
@@ -157,15 +158,19 @@ struct PostDetailPage {
     router.pushUrl({
       url: 'pages/community/UserProfilePage',
       params: { userId: userId }
-    }).catch(() => {});
+    }).catch((error: Error) => {
+      console.error(`[PostDetail] 跳转用户主页失败: ${error.message}`);
+    });
   }
 
   private openImagePreview(index: number): void {
     if (!this.post) return;
     router.pushUrl({
       url: 'pages/community/ImagePreviewPage',
-      params: { postId: this.post.id, imageIndex: index,isLiked: this.isLiked }
-    }).catch(() => {});
+      params: { postId: this.post.id, images: this.post.images, imageIndex: index, isLiked: this.isLiked }
+    }).catch((error: Error) => {
+      console.error(`[PostDetail] 打开图片预览失败: ${error.message}`);
+    });
   }
 
   private async sendComment(): Promise<void> {
@@ -936,51 +941,6 @@ struct PostDetailPage {
   }
 
   private convertApiPost(apiPost: ApiPost): Post {
-    const author: PostAuthor = {
-      id: apiPost.author.id,
-      nickname: apiPost.author.nickname,
-      avatar: apiPost.author.avatar,
-      level: apiPost.author.level,
-      levelTitle: apiPost.author.levelTitle,
-    };
-
-    const post: Post = {
-      id: apiPost.id,
-      author: author,
-      content: apiPost.content,
-      images: apiPost.images,
-      tags: apiPost.tags,
-      likeCount: apiPost.likeCount,
-      commentCount: apiPost.commentCount,
-      shareCount: apiPost.shareCount,
-      collectCount: apiPost.collectCount,
-      isLiked: apiPost.isLiked,
-      isCollected: apiPost.isCollected,
-      createdAt: apiPost.createdAt,
-      type: apiPost.type as 'image' | 'video',
-    };
-
-    if (apiPost.video) {
-      post.video = apiPost.video;
-    }
-
-    if (apiPost.city !== null) {
-      const location: PostLocation = {
-        cityId: apiPost.city.id,
-        cityName: apiPost.city.name,
-      };
-      if (apiPost.address) {
-        location.address = apiPost.address;
-      }
-      if (apiPost.latitude) {
-        location.latitude = apiPost.latitude;
-      }
-      if (apiPost.longitude) {
-        location.longitude = apiPost.longitude;
-      }
-      post.location = location;
-    }
-
-    return post;
+    return mapApiPostToPost(apiPost);
   }
 }

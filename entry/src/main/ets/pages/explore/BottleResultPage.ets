@@ -4,23 +4,49 @@
 
 import { router } from '@kit.ArkUI';
 
+class BottleResultParams {
+  senderName?: string;
+  senderCity?: string;
+  senderLevel?: number;
+  sendTime?: string;
+  distance?: string;
+  wishContent?: string;
+}
+
 @Entry
 @Component
 struct BottleResultPage {
-  @State senderName: string = '小美';
-  @State senderCity: string = '成都';
-  @State senderLevel: number = 5;
-  @State sendTime: string = '2小时前';
-  @State distance: string = '2,300';
-  @State wishContent: string = '希望能看到拉萨布达拉宫的日落 🌅';
+  @State senderName: string = '';
+  @State senderCity: string = '';
+  @State senderLevel: number = 1;
+  @State sendTime: string = '';
+  @State distance: string = '';
+  @State wishContent: string = '';
   @State bottleFloat: number = 0;
 
+  private animateTimer: number = -1;
+
   aboutToAppear(): void {
-    setInterval(() => {
+    const params = router.getParams() as BottleResultParams;
+    this.senderName = params?.senderName || '匿名旅人';
+    this.senderCity = params?.senderCity || '未知海域';
+    this.senderLevel = params?.senderLevel || 1;
+    this.sendTime = params?.sendTime || '刚刚';
+    this.distance = params?.distance || '--';
+    this.wishContent = params?.wishContent || '这个漂流瓶里还没有内容';
+
+    this.animateTimer = setInterval(() => {
       animateTo({ duration: 2000, curve: Curve.EaseInOut }, () => {
         this.bottleFloat = this.bottleFloat === 0 ? -10 : 0;
       });
     }, 2000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.animateTimer !== -1) {
+      clearInterval(this.animateTimer);
+      this.animateTimer = -1;
+    }
   }
 
   build() {

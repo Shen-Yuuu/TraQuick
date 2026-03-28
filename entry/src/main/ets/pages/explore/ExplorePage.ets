@@ -176,7 +176,9 @@ export struct ExplorePage {
     router.pushUrl({
       url: 'pages/explore/CityDetailPage',
       params: { cityId: city.id, cityName: city.name }
-    }).catch(() => {});
+    }).catch((error: Error) => {
+      console.error(`[Explore] 跳转城市详情失败: ${error.message}`);
+    });
   }
 
   build() {
@@ -379,6 +381,15 @@ export struct ExplorePage {
     .width('100%').height('100%').hitTestBehavior(HitTestMode.Transparent)
   }
 
-  onDriftBottleClick(): void { router.pushUrl({ url: 'pages/explore/DriftBottlePage' }).catch(() => {}); }
-  onTimeCapsuleClick(): void { router.pushUrl({ url: 'pages/explore/TimeCapsulePage' }).catch(() => {}); }
+  onDriftBottleClick(): void {
+    router.pushUrl({ url: 'pages/explore/DriftBottlePage' }).catch((error: Error) => {
+      console.error(`[Explore] 跳转漂流瓶失败: ${error.message}`);
+    });
+  }
+
+  onTimeCapsuleClick(): void {
+    router.pushUrl({ url: 'pages/explore/TimeCapsulePage' }).catch((error: Error) => {
+      console.error(`[Explore] 跳转时空胶囊失败: ${error.message}`);
+    });
+  }
 }
